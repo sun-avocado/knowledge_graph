@@ -19,8 +19,8 @@
       typeof window.kbSelectedRowIds.size === "number"
         ? window.kbSelectedRowIds.size
         : window.kbSelectedRowId
-        ? 1
-        : 0;
+          ? 1
+          : 0;
     try {
       if (btnDeleteSelected) {
         btnDeleteSelected.disabled = count === 0;
@@ -49,7 +49,8 @@
       let checkedCount = 0;
       checkboxes.forEach((chk) => {
         const rid = chk.getAttribute("data-id") || "";
-        const selected = window.kbSelectedRowIds && window.kbSelectedRowIds.has(rid);
+        const selected =
+          window.kbSelectedRowIds && window.kbSelectedRowIds.has(rid);
         chk.checked = selected;
         if (selected) checkedCount++;
       });
@@ -66,14 +67,31 @@
   function setTableSelection(id, autoEdit = true, options = {}) {
     const opts = options || {};
     const skipDetailRefresh = opts.skipDetailRefresh === true;
-    window.kbSelectedRowId = id || "";
-    window.kbSelectedRowIds = new Set(id ? [id] : []);
-    window.kbLastAnchorRowId = id || "";
+    const selectedId = id || "";
+    window.kbSelectedRowId = selectedId;
+    window.kbSelectedRowIds = new Set(selectedId ? [selectedId] : []);
+    window.kbLastAnchorRowId = selectedId;
+    window.kbSelectedNodeId = selectedId;
+    window.kbCurrentNodeId = selectedId;
     if (id) {
       window.kbActiveVisNodeId =
         (typeof stripEntityIdPrefix === "function" &&
           stripEntityIdPrefix(id)) ||
         id;
+      window.kbActiveDetailRouteId = id;
+      try {
+        if (typeof normalizeEntityIdForApi === "function") {
+          window.kbActiveDetailNodeId = normalizeEntityIdForApi(id) || id;
+        } else {
+          window.kbActiveDetailNodeId = id;
+        }
+      } catch {
+        window.kbActiveDetailNodeId = id;
+      }
+    } else {
+      window.kbActiveVisNodeId = "";
+      window.kbActiveDetailRouteId = "";
+      window.kbActiveDetailNodeId = "";
     }
     if (!id) {
       window.kbSelectionHydrated = false;
@@ -112,6 +130,13 @@
         }
       }
     } catch {}
+    try {
+      if (window.kbViewMode === "vis" && id) {
+        if (typeof focusNode === "function") {
+          focusNode(id, { fit: false, duration: 180 });
+        }
+      }
+    } catch {}
   }
 
   function toggleCtrlSelection(id) {
@@ -121,6 +146,19 @@
     else window.kbSelectedRowIds.add(id);
     if (window.kbSelectedRowIds.size === 1) {
       window.kbLastAnchorRowId = Array.from(window.kbSelectedRowIds)[0];
+    }
+    if (window.kbSelectedRowIds.size === 1) {
+      const primaryId = Array.from(window.kbSelectedRowIds)[0] || "";
+      window.kbSelectedRowId = primaryId;
+      window.kbSelectedNodeId = primaryId;
+      window.kbCurrentNodeId = primaryId;
+      if (primaryId) {
+        window.kbActiveVisNodeId =
+          (typeof stripEntityIdPrefix === "function" &&
+            stripEntityIdPrefix(primaryId)) ||
+          primaryId;
+        window.kbActiveDetailRouteId = primaryId;
+      }
     }
     updateSelectedRowStyles();
     syncCheckboxStates();
@@ -143,6 +181,17 @@
       }
       const [start, end] = a < b ? [a, b] : [b, a];
       window.kbSelectedRowIds = new Set(ids.slice(start, end + 1));
+      const primaryId = ids[b] || id || "";
+      window.kbSelectedRowId = primaryId;
+      window.kbSelectedNodeId = primaryId;
+      window.kbCurrentNodeId = primaryId;
+      if (primaryId) {
+        window.kbActiveVisNodeId =
+          (typeof stripEntityIdPrefix === "function" &&
+            stripEntityIdPrefix(primaryId)) ||
+          primaryId;
+        window.kbActiveDetailRouteId = primaryId;
+      }
       updateSelectedRowStyles();
       syncCheckboxStates();
       ensureTableSelectedButtonsState();
@@ -179,7 +228,7 @@
     const rows = getTableRows();
     if (!rows.length) return;
     let idx = rows.findIndex(
-      (tr) => (tr.getAttribute("data-id") || "") === window.kbSelectedRowId
+      (tr) => (tr.getAttribute("data-id") || "") === window.kbSelectedRowId,
     );
     if (idx === -1) idx = step > 0 ? -1 : rows.length;
     idx = Math.max(0, Math.min(rows.length - 1, idx + step));
@@ -206,7 +255,7 @@
 
     const rows = getTableRows();
     const target = rows.find(
-      (tr) => (tr.getAttribute("data-id") || "") === primaryId
+      (tr) => (tr.getAttribute("data-id") || "") === primaryId,
     );
     let href = "";
     if (target) {
@@ -251,7 +300,9 @@
     const tbody = tblNodes.querySelector("tbody");
     if (!tbody) return;
 
-    const rawList = Array.isArray(window.kbTableNodes) ? window.kbTableNodes : [];
+    const rawList = Array.isArray(window.kbTableNodes)
+      ? window.kbTableNodes
+      : [];
     const frag = document.createDocumentFragment();
 
     rawList.forEach((n) => {
@@ -310,7 +361,8 @@
         const params = new URLSearchParams();
         if (id) params.set("id", id);
         else if (label) params.set("label", label);
-        nameLink.href = "/kb/detail" + (params.toString() ? "?" + params.toString() : "");
+        nameLink.href =
+          "/kb/detail" + (params.toString() ? "?" + params.toString() : "");
         nameLink.rel = "noreferrer noopener";
       } catch {}
 
@@ -359,7 +411,8 @@
           setViewMode("vis", { targetNodeId: rid });
         }
         try {
-          if (!window.kbCy && typeof loadGraph === "function") await loadGraph();
+          if (!window.kbCy && typeof loadGraph === "function")
+            await loadGraph();
           if (typeof focusNode === "function") focusNode(rid);
         } catch {}
       });
@@ -397,7 +450,7 @@
     try {
       const rows = Array.from(tblNodes.querySelectorAll("tbody tr"));
       const has = rows.some(
-        (tr) => (tr.getAttribute("data-id") || "") === window.kbSelectedRowId
+        (tr) => (tr.getAttribute("data-id") || "") === window.kbSelectedRowId,
       );
       const hasExistingSelection =
         (window.kbSelectedRowId && window.kbSelectedRowId.trim()) ||
@@ -433,7 +486,11 @@
   async function deleteSelectedRows() {
     const ids = Array.from(window.kbSelectedRowIds || []);
     if (!ids.length) return;
-    if (!confirm(`确定删除选中 ${ids.length} 个节点及其所有关系？此操作不可恢复。`)) {
+    if (
+      !confirm(
+        `确定删除选中 ${ids.length} 个节点及其所有关系？此操作不可恢复。`,
+      )
+    ) {
       return;
     }
 

@@ -4232,7 +4232,13 @@
           } else {
             try {
               window.kbCy.resize();
-              window.kbCy.fit();
+              const currentVisId =
+                resolvedVisNodeId ||
+                ensureEntityIdPrefix(window.kbActiveVisNodeId || "") ||
+                ensureEntityIdPrefix(window.kbSelectedRowId || "") ||
+                (document.getElementById("fId")?.value || "").trim();
+              if (currentVisId) focusNode(currentVisId);
+              else window.kbCy.fit();
             } catch {}
           }
         } else if (isAttr) {
@@ -4324,8 +4330,11 @@
       if (btnViewDetail)
         btnViewDetail.addEventListener("click", (e) => {
           e.preventDefault();
-          // 优先用最新选中节点id作为详情页的targetNodeId，保证路由同步
-          const detailId = (window.kbSelectedNodeId || "").trim();
+          const detailId =
+            (window.kbSelectedNodeId || "").trim() ||
+            (window.kbSelectedRowId || "").trim() ||
+            (window.kbActiveDetailRouteId || "").trim() ||
+            (document.getElementById("fId")?.value || "").trim();
           if (detailId) {
             setViewMode("detail", { targetNodeId: detailId });
           } else {
@@ -4375,7 +4384,11 @@
         });
       }
       attachNavKeyActivation(btnViewDetail, () => {
-        const detailId = (window.kbSelectedNodeId || '').trim();
+        const detailId =
+          (window.kbSelectedNodeId || '').trim() ||
+          (window.kbSelectedRowId || '').trim() ||
+          (window.kbActiveDetailRouteId || '').trim() ||
+          (document.getElementById('fId')?.value || '').trim();
         if (detailId) setViewMode('detail', { targetNodeId: detailId });
         else setViewMode('detail');
       });
@@ -4779,6 +4792,11 @@
                     const id = evt.target?.data('id');
                     if (!id) return;
                     try {
+                      if (typeof setTableSelection === 'function') {
+                        setTableSelection(id, false, { skipDetailRefresh: true });
+                      }
+                    } catch (e) {}
+                    try {
                       if (typeof setViewMode === 'function') {
                         setViewMode('vis', { targetNodeId: id });
                       }
@@ -5150,10 +5168,34 @@
           options.targetNodeId = nodeFromHash;
           // 自动同步选中节点
           window.kbSelectedRowId = nodeFromHash;
+          window.kbSelectedRowIds = new Set([nodeFromHash]);
           window.kbLastAnchorRowId = nodeFromHash;
+          window.kbSelectedNodeId = nodeFromHash;
           window.kbCurrentNodeId = nodeFromHash;
+          window.kbActiveDetailRouteId = nodeFromHash;
+          try {
+            if (typeof normalizeEntityIdForApi === "function") {
+              window.kbActiveDetailNodeId =
+                normalizeEntityIdForApi(nodeFromHash) || nodeFromHash;
+            } else {
+              window.kbActiveDetailNodeId = nodeFromHash;
+            }
+          } catch {
+            window.kbActiveDetailNodeId = nodeFromHash;
+          }
+          window.kbActiveVisNodeId =
+            stripEntityIdPrefix(nodeFromHash) || nodeFromHash;
         }
         setViewMode(next, options);
+        if (next === "vis" && nodeFromHash) {
+          requestAnimationFrame(() => {
+            try {
+              if (typeof focusNode === "function") {
+                focusNode(nodeFromHash, { fit: false, duration: 180 });
+              }
+            } catch {}
+          });
+        }
       });
 
       async function handleCreateCleanTaskSubmit(event) {
@@ -5710,7 +5752,6 @@
               focusNode(fullId);
               try {
                 window.kbCy.resize();
-                window.kbCy.fit();
               } catch {}
             } catch (e) {
               console.error("replace neighborhood failed", e);
@@ -6720,6 +6761,14 @@
               const ele = evt.target;
               const id = ele?.data("id");
               if (!id) return;
+              try {
+                if (typeof setTableSelection === "function") {
+                  setTableSelection(id, false, { skipDetailRefresh: true });
+                }
+              } catch (e) {}
+              try {
+                focusNode(id, { fit: false, duration: 180 });
+              } catch (e) {}
               // default: normal node click flows to left panel edit
               enterEditById(id);
               // 记录选中节点id，供详情页切换时使用
@@ -6784,6 +6833,12 @@
 
           // Focus/highlight target based on route or current selection
           try {
+            const { view: routeView, node: routeNode } = getRouteStateFromHash();
+            const isVisMode =
+              (window.kbViewMode || "table") === "vis" || routeView === "vis";
+            const nodeIdForFetch = routeNode
+              ? ensureEntityIdPrefix(routeNode)
+              : "";
             const { node: nodeParam, label } = getUrlParams();
             let highlightId = nodeIdForFetch || "";
             if (!highlightId && isVisMode && window.kbActiveVisNodeId) {
@@ -7062,7 +7117,9 @@
         // 自动同步选中节点
         if (initialNodeId) {
           window.kbSelectedRowId = initialNodeId;
+          window.kbSelectedRowIds = new Set([initialNodeId]);
           window.kbLastAnchorRowId = initialNodeId;
+          window.kbSelectedNodeId = initialNodeId;
           window.kbCurrentNodeId = initialNodeId;
         }
         setViewMode(initialMode, {
@@ -7497,9 +7554,12 @@
             // After left panel changes size, re-fit the graph to current container
             try {
               if (window.kbCy) {
-                const container = document.getElementById("cy");
                 window.kbCy.resize();
-                window.kbCy.fit();
+                if (window.kbViewMode === "vis") {
+                  focusNode(fullId, { fit: false, duration: 180 });
+                } else {
+                  window.kbCy.fit();
+                }
               }
             } catch {}
             // Load attributes and relations for this node
@@ -7523,28 +7583,84 @@
       function focusNode(nodeId, options = {}) {
         try {
           if (!window.kbCy) return;
-          const fullId = ensureEntityIdPrefix(nodeId);
-          if (!fullId) return;
+          const rawInputId = String(nodeId || "").trim();
+          const fullId = ensureEntityIdPrefix(rawInputId);
+          const shortId = stripEntityIdPrefix(rawInputId) || rawInputId;
+          if (!fullId && !shortId) return;
           const autoFit = options.fit !== false;
           const padding = Number.isFinite(options.padding)
             ? options.padding
             : 60;
-          let ele = window.kbCy.getElementById(fullId);
-          if (!ele || ele.empty()) {
-            window.kbCy.fit();
-            ele = window.kbCy.getElementById(fullId);
+          const duration = Number.isFinite(options.duration)
+            ? options.duration
+            : 220;
+          const idCandidates = [];
+          if (fullId) idCandidates.push(fullId);
+          if (shortId) idCandidates.push(shortId);
+          if (rawInputId && !idCandidates.includes(rawInputId)) {
+            idCandidates.push(rawInputId);
+          }
+          let ele = null;
+          for (const candidate of idCandidates) {
+            try {
+              const found = window.kbCy.getElementById(candidate);
+              if (found && !found.empty()) {
+                ele = found;
+                break;
+              }
+            } catch {}
           }
           if (ele && !ele.empty()) {
+            const activeId = ele.id();
             try {
               window.kbCy
                 .nodes(".highlight")
-                .filter((n) => n.id() !== fullId)
+                .filter((n) => n.id() !== activeId)
                 .forEach((n) => n.removeClass("highlight"));
             } catch {}
             ele.addClass("highlight");
             if (autoFit) {
-              window.kbCy.center(ele);
-              window.kbCy.fit(ele, padding);
+              try {
+                window.kbCy.stop();
+              } catch {}
+              try {
+                window.kbCy.animate(
+                  {
+                    fit: {
+                      eles: ele,
+                      padding,
+                    },
+                    duration,
+                    easing: "ease-out-cubic",
+                  },
+                  {
+                    queue: false,
+                  },
+                );
+              } catch {
+                window.kbCy.center(ele);
+                window.kbCy.fit(ele, padding);
+              }
+            } else {
+              try {
+                window.kbCy.stop();
+              } catch {}
+              try {
+                window.kbCy.animate(
+                  {
+                    center: {
+                      eles: ele,
+                    },
+                    duration,
+                    easing: "ease-out-cubic",
+                  },
+                  {
+                    queue: false,
+                  },
+                );
+              } catch {
+                window.kbCy.center(ele);
+              }
             }
           }
         } catch {}
