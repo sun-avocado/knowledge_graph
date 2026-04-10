@@ -1,0 +1,953 @@
+﻿      // --- Project sidebar logic ---
+      async function loadProjectsToSidebar() {
+        const wrap = document.querySelector('.project-list');
+        if (!wrap) return;
+        wrap.innerHTML = '<div class="muted">加载中…</div>';
+        try {
+          const resp = await fetch('/api/kb/list_projects');
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          const data = await resp.json();
+          const items = Array.isArray(data.projects) ? data.projects : [];
+          wrap.innerHTML = '';
+          if (!items.length) {
+            wrap.innerHTML = '<div class="muted">暂无项目</div>';
+            return;
+          }
+          const currentDb = getUrlParam('db') || '';
+          // If a DB is currently selected, show it in the header (and do not include it in the sidebar list)
+          if (currentDb) {
+            try {
+              const found = items.find(it => ((it.file || '').replace(/\.sqlite$/, '')) === currentDb);
+              if (found) try { updateHeaderProjectInfo(currentDb, found.title || currentDb, found.image || ''); } catch(e) {}
+            } catch (e) {}
+          }
+          // Render only projects that are NOT currently selected
+          const visibleItems = items.filter(it => ((it.file || '').replace(/\.sqlite$/, '')) !== currentDb);
+          if (!visibleItems.length) {
+            wrap.innerHTML = '<div class="muted">暂无项目</div>';
+            return;
+          }
+          visibleItems.forEach(it => {
+            const dbId = (it.file || '').replace(/\.sqlite$/, '');
+            const entry = document.createElement('a');
+            entry.className = 'project-entry';
+            entry.href = '#';
+            entry.setAttribute('data-db', dbId);
+            entry.setAttribute('data-image', it.image || '');
+            entry.setAttribute('data-title', it.title || '');
+            entry.setAttribute('data-desc', (it.desc || it.description) || '');
+            const title = it.title ? it.title : dbId;
+            entry.title = title + '（双击编辑）';
+            entry.setAttribute('aria-label', title);
+            entry.tabIndex = 0;
+            if (it.image && typeof it.image === 'string' && it.image.trim()) {
+              const img = document.createElement('span');
+              img.className = 'project-avatar-img';
+              img.style.backgroundImage = `url(${it.image})`;
+              entry.appendChild(img);
+            } else {
+              const initials = (it.title || dbId || '?').replace(/\s+/g, '').slice(0,2).toUpperCase() || '?';
+              const span = document.createElement('span');
+              span.className = 'project-initials';
+              span.textContent = initials;
+              entry.appendChild(span);
+            }
+            // label (shown when sidebar expanded) - show full title (CSS will truncate if needed)
+            const label = document.createElement('span');
+            label.className = 'project-entry-label';
+            try {
+              const base = (title || dbId || '').toString().trim();
+              // store both full and short forms for responsive/compact behavior
+              label.dataset.full = base;
+              label.dataset.short = Array.from(base).slice(0,3).join('');
+              // show full title by default; label.title holds full text for tooltip
+              label.textContent = base;
+              label.title = base;
+              const sidebarEl = document.getElementById('projectSidebar');
+              const isCollapsed = sidebarEl && sidebarEl.classList.contains('collapsed');
+              label.setAttribute('aria-hidden', String(!!isCollapsed));
+            } catch (e) { label.textContent = title; }
+            entry.appendChild(label);
+            // click with slight delay to allow dblclick to override
+            entry.addEventListener('click', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (entry._clickTimer) return;
+              entry._clickTimer = setTimeout(() => {
+                entry._clickTimer = null;
+                // perform animated selection then navigate
+                try { selectProjectWithAnimation(dbId, entry, title, entry.getAttribute('data-image') || ''); } catch (e) { try { setUrlParam('db', dbId); } catch (err) {} }
+              }, 260);
+            });
+              entry.addEventListener('dblclick', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              // cancel pending click switch
+              if (entry._clickTimer) { clearTimeout(entry._clickTimer); entry._clickTimer = null; }
+              // open edit modal
+              try {
+                try { updateHeaderProjectInfo(dbId, title, entry.getAttribute('data-image') || ''); } catch (e) {}
+                openEditProjectModal(dbId, entry.getAttribute('data-title') || '', entry.getAttribute('data-image') || '', entry.getAttribute('data-desc') || '');
+              } catch (err) {}
+            });
+            entry.addEventListener('keydown', (e) => {
+              const key = e.key || e.keyCode;
+              if (key === 'Enter' || key === 13) {
+                e.preventDefault();
+                try { selectProjectWithAnimation(dbId, entry, title, entry.getAttribute('data-image') || ''); } catch (err) { try { setUrlParam('db', dbId); } catch(e) {} }
+              }
+            });
+            wrap.appendChild(entry);
+          });
+          try { updateSidebarLabelMode(); } catch (e) {}
+        } catch (err) {
+          wrap.innerHTML = '<div class="muted">加载失败</div>';
+          console.warn('loadProjectsToSidebar failed', err);
+        }
+      }
+
+      // Global helper to control sidebar collapsed/expanded state
+  function setSidebarCollapsed(collapsed, persist = true, skipFocus = false, instant = false) {
+        const sidebarEl = document.getElementById('projectSidebar');
+        const splitEl = document.querySelector('.kb-split');
+        const COLLAPSE_KEY = 'kbProjectSidebarCollapsed';
+        if (!sidebarEl) return;
+    // Avoid toggling while an animation is already in progress, unless instant override requested
+    if (sidebarEl.classList.contains('animating') && !instant) return;
+
+        const wasCollapsed = sidebarEl.classList.contains('collapsed');
+        // if state didn't change, just persist and return
+        if (wasCollapsed === collapsed) {
+          try { sidebarEl.setAttribute('aria-expanded', String(!collapsed)); } catch (e) {}
+          if (persist && window.localStorage) { try { localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0'); } catch (e) {} }
+          return;
+        }
+
+        // If instant requested, temporarily disable CSS transitions/animations
+        if (instant) {
+          try { sidebarEl.classList.remove('animating'); } catch(e){}
+          try { sidebarEl.classList.add('no-sidebar-transition'); } catch(e){}
+          try { if (splitEl) splitEl.classList.add('no-sidebar-transition'); } catch(e){}
+        } else {
+          // Ensure transitions are enabled if a no-sidebar-transition flag was left (e.g., from hover)
+          try { sidebarEl.classList.remove('no-sidebar-transition'); } catch(e){}
+          try { if (splitEl) splitEl.classList.remove('no-sidebar-transition'); } catch(e){}
+          // force reflow so the transition will apply
+          void sidebarEl.offsetWidth;
+          // Mark as animating to prevent re-entrant toggles
+          sidebarEl.classList.add('animating');
+          if (splitEl) splitEl.classList.add('animating');
+        }
+
+        sidebarEl.classList.toggle('collapsed', collapsed);
+        sidebarEl.classList.toggle('expanded', !collapsed);
+        try { sidebarEl.setAttribute('aria-expanded', String(!collapsed)); } catch (e) {}
+        if (splitEl) splitEl.classList.toggle('sidebar-collapsed', collapsed);
+        if (splitEl) splitEl.classList.toggle('sidebar-expanded', !collapsed);
+        // update aria-hidden on labels for screen readers
+        try {
+          const labels = sidebarEl.querySelectorAll('.project-entry-label');
+          labels.forEach(l => {
+            try {
+              l.setAttribute('aria-hidden', String(!!collapsed));
+              // Ensure label text is synced with the entry's data-title/db so expanded view shows full names
+              const entry = l.closest && l.closest('.project-entry');
+              const full = (entry && (entry.getAttribute('data-title') || entry.getAttribute('data-db'))) ? (entry.getAttribute('data-title') || entry.getAttribute('data-db')) : (l.title || '');
+              if (full) { l.textContent = full; l.title = full; }
+            } catch(e){}
+          });
+        } catch (e) {}
+        if (persist && window.localStorage) {
+          try { localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0'); } catch (e) {}
+        }
+
+        // Recompute compact/short label mode after sidebar size/state changes
+        try { updateSidebarLabelMode(); } catch (e) {}
+
+        // Clear any temporary hover-expanded state when we programmatically change sidebar state
+        try { sidebarEl.classList.remove('hover-expanded'); } catch(e){}
+        try { sidebarEl.classList.remove('no-sidebar-transition'); } catch(e){}
+        try { if (splitEl) splitEl.classList.remove('no-sidebar-transition'); } catch(e){}
+
+        // If instant, remove the temporary no-transition class on next frame so future transitions work
+        if (instant) {
+          try {
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+              try { sidebarEl.classList.remove('no-sidebar-transition'); } catch(e){}
+              try { if (splitEl) splitEl.classList.remove('no-sidebar-transition'); } catch(e){}
+            }));
+          } catch (e) {}
+          // No animating class/event handlers when instant; return early after focus handling below
+        }
+
+        // When expanding, ensure selected entry is visible and focused
+        try {
+          if (!collapsed && !skipFocus) {
+              const selected = sidebarEl.querySelector('.project-list .project-entry.selected');
+              const firstEntry = sidebarEl.querySelector('.project-list .project-entry');
+              const target = selected || firstEntry;
+              if (target) {
+                const preferReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                try {
+                  if (!preferReduced && target.scrollIntoView) target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+                } catch (e) {}
+                try { target.focus(); } catch (e) {}
+              }
+            }
+        } catch (e) {}
+
+        // Cleanup animating class once the transition finishes (or fallback timeout)
+        if (!instant) {
+          const onTransitionEnd = (evt) => {
+            const isSidebarWidth = (evt.target === sidebarEl && (evt.propertyName === 'width' || evt.propertyName === 'padding'));
+            const isGridCols = (evt.target === splitEl && evt.propertyName === 'grid-template-columns');
+            if (isSidebarWidth || isGridCols) {
+              sidebarEl.classList.remove('animating');
+              if (splitEl) splitEl.classList.remove('animating');
+              try { sidebarEl.removeEventListener('transitionend', onTransitionEnd); } catch(e){}
+              try { if (splitEl) splitEl.removeEventListener('transitionend', onTransitionEnd); } catch(e){}
+            }
+          };
+          try { sidebarEl.addEventListener('transitionend', onTransitionEnd); } catch(e){}
+          try { if (splitEl) splitEl.addEventListener('transitionend', onTransitionEnd); } catch(e){}
+          // Fallback in case transitionend doesn't fire
+          setTimeout(() => {
+            sidebarEl.classList.remove('animating');
+            if (splitEl) splitEl.classList.remove('animating');
+            try { sidebarEl.removeEventListener('transitionend', onTransitionEnd); } catch(e){}
+            try { if (splitEl) splitEl.removeEventListener('transitionend', onTransitionEnd); } catch(e){}
+          }, 400);
+        }
+      }
+
+      // --- User sidebar logic (right side) ---
+      async function loadUsersToSidebar() {
+        const wrap = document.querySelector('.user-list');
+        if (!wrap) return;
+        wrap.innerHTML = '<div class="muted">加载中…</div>';
+        try {
+          const resp = await fetch('/api/auth/users');
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          const data = await resp.json();
+          let items = Array.isArray(data.users) ? data.users : [];
+          // Filter out current logged-in user for the right-side list
+          try {
+            const current = (window && window.authUser && window.authUser.username) ? (window.authUser.username || '').toString().toLowerCase() : '';
+            if (current) {
+              items = items.filter(it => ((it.username || '') + '').toString().toLowerCase() !== current);
+            }
+          } catch (e) {}
+          wrap.innerHTML = '';
+          if (!items.length) { wrap.innerHTML = '<div class="muted">暂无用户</div>'; return; }
+          items.forEach(it => {
+            const username = it.username || '';
+            const entry = document.createElement('a');
+            entry.className = 'project-entry';
+            entry.href = '#';
+            entry.setAttribute('data-username', username);
+            entry.setAttribute('data-image', it.avatar || '');
+            entry.setAttribute('data-title', it.displayName || username || '');
+            entry.tabIndex = 0;
+            if (it.avatar && typeof it.avatar === 'string' && it.avatar.trim()) {
+              const img = document.createElement('span');
+              img.className = 'project-avatar-img';
+              img.style.backgroundImage = `url(${it.avatar})`;
+              entry.appendChild(img);
+            } else {
+              const initials = (it.displayName || username || '?').toString().replace(/\s+/g,'').slice(0,2).toUpperCase() || '?';
+              const span = document.createElement('span');
+              span.className = 'project-initials';
+              span.textContent = initials;
+              entry.appendChild(span);
+            }
+            const label = document.createElement('span');
+            label.className = 'project-entry-label';
+            label.textContent = it.displayName || username || '';
+            label.dataset.full = label.textContent;
+            label.dataset.short = (label.textContent || '').slice(0, 12);
+            entry.appendChild(label);
+            entry.addEventListener('click', (e) => {
+              e.preventDefault();
+              try {
+                const prev = wrap.querySelector('.project-entry.selected');
+                if (prev && prev !== entry) prev.classList.remove('selected');
+                entry.classList.add('selected');
+                entry.focus();
+              } catch (err) {}
+            });
+            entry.addEventListener('dblclick', (e) => {
+              try { e.preventDefault(); const chatInput = document.getElementById('chat-q'); if (chatInput) { chatInput.value = '@' + (username || '') + ' '; try { chatInput.focus(); } catch(e){} } } catch(e){}
+            });
+            wrap.appendChild(entry);
+          });
+          try { updateUserSidebarLabelMode(); } catch (e) {}
+        } catch (e) {
+          wrap.innerHTML = `<div class="muted">加载失败: ${e && e.message ? e.message : e}</div>`;
+        }
+      }
+
+      function updateUserSidebarLabelMode() {
+        try {
+          const sidebarEl = document.getElementById('userSidebar');
+          const wrap = document.querySelector('.user-list');
+          if (!sidebarEl || !wrap) return;
+          const entries = Array.from(wrap.querySelectorAll('.project-entry'));
+
+          // allow manual override via global or localStorage
+          let override = null;
+          try {
+            if (typeof window !== 'undefined' && typeof window.SIDEBAR_LABEL_COMPACT_THRESHOLD !== 'undefined') {
+              const v = parseInt(window.SIDEBAR_LABEL_COMPACT_THRESHOLD || '', 10);
+              if (!isNaN(v)) override = v;
+            }
+          } catch (e) {}
+          try {
+            if (override === null && window && window.localStorage) {
+              const stored = localStorage.getItem('kbUserSidebarLabelCompactThreshold');
+              if (stored !== null) {
+                const sv = parseInt(stored || '', 10);
+                if (!isNaN(sv)) override = sv;
+              }
+            }
+          } catch (e) {}
+
+          let enableCompact = false;
+          if (override !== null && !isNaN(override)) {
+            enableCompact = entries.length > override;
+          } else {
+            const avail = wrap.clientHeight || wrap.getBoundingClientRect().height || window.innerHeight * 0.5;
+            let per = 56;
+            if (entries.length >= 2) {
+              try { per = Math.max(24, entries[1].offsetTop - entries[0].offsetTop); } catch (e) {}
+            } else if (entries.length === 1) {
+              try { per = Math.max(24, entries[0].offsetHeight); } catch (e) {}
+            }
+            const fit = Math.max(1, Math.floor(avail / per));
+            enableCompact = entries.length > fit;
+          }
+
+          if (enableCompact) {
+            sidebarEl.classList.add('compact-labels');
+            entries.forEach(ent => {
+              try {
+                const lab = ent.querySelector('.project-entry-label');
+                if (lab) {
+                  lab.textContent = lab.dataset.short || (lab.dataset.full || lab.textContent);
+                  lab.title = lab.dataset.full || lab.title || '';
+                }
+              } catch (e) {}
+            });
+          } else {
+            sidebarEl.classList.remove('compact-labels');
+            entries.forEach(ent => {
+              try {
+                const lab = ent.querySelector('.project-entry-label');
+                if (lab) {
+                  lab.textContent = lab.dataset.full || lab.textContent;
+                  lab.title = lab.dataset.full || lab.title || '';
+                }
+              } catch (e) {}
+            });
+          }
+        } catch (e) { console.warn('updateUserSidebarLabelMode failed', e); }
+      }
+
+      function setupUserSidebarHover() {
+        try {
+          const sidebar = document.getElementById('userSidebar');
+          const split = document.querySelector('.kb-split');
+          if (!sidebar) return;
+          const projectListEl = sidebar.querySelector('.project-list');
+          if (!projectListEl) return;
+          let _sidebarHoverTimer = null;
+          projectListEl.addEventListener('mouseover', (e) => {
+            try {
+              const entry = e.target && e.target.closest ? e.target.closest('.project-entry') : null;
+              if (!entry) return;
+              if (_sidebarHoverTimer) { clearTimeout(_sidebarHoverTimer); _sidebarHoverTimer = null; }
+              try { sidebar.classList.add('hover-expanded'); } catch (err) {}
+              try { sidebar.classList.add('no-sidebar-transition'); if (split) split.classList.add('no-sidebar-transition'); } catch (err) {}
+              try {
+                const lab = entry.querySelector('.project-entry-label');
+                if (lab && lab.dataset && lab.dataset.full) {
+                  try {
+                    if (sidebar.classList.contains('compact-labels')) {
+                      const others = sidebar.querySelectorAll('.project-entry-label');
+                      others.forEach(o => { if (o !== lab && o.dataset && o.dataset.short) { try { o.textContent = o.dataset.short; } catch(e){} } });
+                    }
+                  } catch(e) {}
+                  lab.textContent = lab.dataset.full;
+                  lab.title = lab.dataset.full;
+                }
+              } catch (err) {}
+            } catch (err) {}
+          });
+          projectListEl.addEventListener('mouseout', (e) => {
+            try {
+              const to = e.relatedTarget;
+              const enteringEntry = to && to.closest ? to.closest('.project-entry') : null;
+              if (enteringEntry) return;
+              if (_sidebarHoverTimer) clearTimeout(_sidebarHoverTimer);
+              _sidebarHoverTimer = setTimeout(() => {
+                if (sidebar.contains(document.activeElement)) return;
+                if (sidebar.classList.contains('hover-expanded')) {
+                  try { sidebar.classList.remove('hover-expanded'); } catch (err) {}
+                  try { sidebar.classList.remove('no-sidebar-transition'); if (split) split.classList.remove('no-sidebar-transition'); } catch (err) {}
+                }
+                try { updateUserSidebarLabelMode(); } catch (err) {}
+              }, 160);
+            } catch (err) {}
+          });
+          sidebar.addEventListener('mouseleave', (e) => {
+            try {
+              if (sidebar.contains(document.activeElement)) return;
+              try { sidebar.classList.remove('hover-expanded'); } catch (err) {}
+              try { sidebar.classList.remove('no-sidebar-transition'); if (split) split.classList.remove('no-sidebar-transition'); } catch (err) {}
+              try { updateUserSidebarLabelMode(); } catch (e) {}
+            } catch (err) {}
+          });
+          // auto-update compact mode on resize or DOM changes
+          try {
+            let _lblResizeTimer = null;
+            window.addEventListener('resize', () => {
+              if (_lblResizeTimer) clearTimeout(_lblResizeTimer);
+              _lblResizeTimer = setTimeout(() => { try { updateUserSidebarLabelMode(); } catch(e) {} }, 160);
+            });
+            if (typeof MutationObserver !== 'undefined') {
+              const mo = new MutationObserver(() => { try { updateUserSidebarLabelMode(); } catch(e) {} });
+              try { mo.observe(projectListEl, { childList: true }); } catch (e) {}
+            }
+          } catch (e) {}
+        } catch (e) {}
+      }
+
+      // Edit project modal logic
+      const editProjectModal = document.getElementById('editProjectModal');
+      const inputProjectImageUrl = document.getElementById('inputProjectImageUrl');
+  const editProjectPreview = document.getElementById('editProjectPreview');
+  const editProjectPreviewImg = document.getElementById('editProjectPreviewImg');
+  const editProjectPreviewStatus = document.getElementById('editProjectPreviewStatus');
+    // Create project modal preview elements
+    const inputProjectCreateImageUrl = document.getElementById('inputProjectCreateImageUrl');
+    const createProjectPreview = document.getElementById('createProjectPreview');
+    const createProjectPreviewImg = document.getElementById('createProjectPreviewImg');
+    const createProjectPreviewStatus = document.getElementById('createProjectPreviewStatus');
+      const editProjectError = document.getElementById('editProjectError');
+      const editProjectId = document.getElementById('editProjectId');
+      const btnCancelEditProject = document.getElementById('btnCancelEditProject');
+      const btnSubmitEditProject = document.getElementById('btnSubmitEditProject');
+      // title/description inputs
+      const inputProjectEditTitle = document.getElementById('inputProjectEditTitle');
+      const inputProjectEditDesc = document.getElementById('inputProjectEditDesc');
+
+      // helper: small toast messages
+      function showToast(msg, type = 'success', duration = 3000) {
+        try {
+          let wrap = document.getElementById('kbToastWrap');
+          if (!wrap) {
+            wrap = document.createElement('div');
+            wrap.id = 'kbToastWrap';
+            document.body.appendChild(wrap);
+          }
+          const el = document.createElement('div');
+          el.className = 'kb-toast kb-toast-' + (type === 'error' ? 'error' : 'success');
+          el.textContent = msg;
+          wrap.appendChild(el);
+          // show
+          setTimeout(() => el.classList.add('show'), 10);
+          // remove
+          setTimeout(() => {
+            el.classList.remove('show');
+            setTimeout(() => { try { el.remove(); } catch (e) {} }, 200);
+          }, duration);
+        } catch (e) { console.warn('showToast failed', e); }
+      }
+
+      // helper: update sidebar entry and project-selection modal card
+      function updateProjectEntryInUI(dbId, title, desc, image) {
+        try {
+          const sel = document.querySelector('.project-list .project-entry[data-db="' + dbId + '"]');
+          if (sel) {
+            sel.setAttribute('data-title', title || '');
+            sel.setAttribute('data-desc', desc || '');
+            sel.setAttribute('data-image', image || '');
+            sel.title = (title || dbId) + '（双击编辑）';
+            sel.setAttribute('aria-label', title || dbId);
+            const labelEl = sel.querySelector('.project-entry-label');
+            if (labelEl) {
+              try {
+                const base = (title || dbId || '').toString().trim();
+                labelEl.dataset.full = base;
+                labelEl.dataset.short = Array.from(base).slice(0,3).join('');
+                // respect compact mode
+                const sidebarEl = document.getElementById('projectSidebar');
+                const compact = sidebarEl && sidebarEl.classList.contains('compact-labels');
+                labelEl.textContent = compact ? (labelEl.dataset.short || base) : base;
+                labelEl.title = base;
+              } catch (e) { labelEl.textContent = title || dbId; }
+            }
+            // update avatar
+            if (image && image.trim()) {
+              const imgSpan = sel.querySelector('.project-avatar-img');
+              if (imgSpan) {
+                imgSpan.style.backgroundImage = `url(${image})`;
+              } else {
+                const initials = sel.querySelector('.project-initials'); if (initials) initials.remove();
+                const img = document.createElement('span');
+                img.className = 'project-avatar-img';
+                img.style.backgroundImage = `url(${image})`;
+                sel.insertBefore(img, sel.firstChild);
+              }
+            } else {
+              const imgSpan = sel.querySelector('.project-avatar-img'); if (imgSpan) imgSpan.remove();
+              const initialsText = (title || dbId || '?').replace(/\s+/g, '').slice(0,2).toUpperCase() || '?';
+              const span = document.createElement('span'); span.className = 'project-initials'; span.textContent = initialsText;
+              const existing = sel.querySelector('.project-initials'); if (!existing) sel.insertBefore(span, sel.firstChild);
+            }
+          }
+          // if this is the currently selected DB, update header as well
+          try { if ((getUrlParam('db') || '') === dbId) updateHeaderProjectInfo(dbId, title || dbId, image || ''); } catch(e) {}
+          // update card in project selection modal if present
+          const card = document.querySelector('#dbProjectListWrap .db-project-card[data-db="' + dbId + '"]');
+          if (card) {
+            const titleEl = card.querySelector('.db-project-title');
+            if (titleEl) { titleEl.textContent = title || dbId; titleEl.title = title || dbId; card.dataset.title = title || dbId; }
+            const descEl = card.querySelector('.db-project-desc');
+            if (descEl) { descEl.textContent = desc || ''; card.dataset.desc = desc || ''; }
+            const avatar = card.querySelector('.db-avatar');
+            if (avatar) {
+              if (image && image.trim()) {
+                avatar.style.background = `#fff url(${image}) center/cover no-repeat`;
+                avatar.style.backgroundSize = 'cover';
+              } else {
+                avatar.style.background = '';
+                avatar.textContent = (title || dbId || '').replace(/\s+/g,'').slice(0,2).toUpperCase() || '?';
+              }
+            }
+          }
+        } catch (e) { console.warn('updateProjectEntryInUI failed', e); }
+      }
+
+      // Update header project display (avatar + name)
+      function updateHeaderProjectInfo(dbId, title, image) {
+
+      // Toggle compact label mode if there are many projects to keep layout tidy
+      function updateSidebarLabelMode() {
+        try {
+          const sidebarEl = document.getElementById('projectSidebar');
+          const wrap = document.querySelector('.project-list');
+          if (!sidebarEl || !wrap) return;
+          const entries = Array.from(wrap.querySelectorAll('.project-entry'));
+
+          // Allow manual override via window.SIDEBAR_LABEL_COMPACT_THRESHOLD or localStorage
+          let override = null;
+          try {
+            if (typeof window !== 'undefined' && typeof window.SIDEBAR_LABEL_COMPACT_THRESHOLD !== 'undefined') {
+              const v = parseInt(window.SIDEBAR_LABEL_COMPACT_THRESHOLD || '', 10);
+              if (!isNaN(v)) override = v;
+            }
+          } catch (e) {}
+          try {
+            if (override === null && window && window.localStorage) {
+              const stored = localStorage.getItem('kbSidebarLabelCompactThreshold');
+              if (stored !== null) {
+                const sv = parseInt(stored || '', 10);
+                if (!isNaN(sv)) override = sv;
+              }
+            }
+          } catch (e) {}
+
+          let enableCompact = false;
+          if (override !== null && !isNaN(override)) {
+            enableCompact = entries.length > override;
+          } else {
+            // Auto-detect how many entries fit into the visible project list area
+            const avail = wrap.clientHeight || wrap.getBoundingClientRect().height || window.innerHeight * 0.5;
+            let per = 56;
+            if (entries.length >= 2) {
+              try {
+                per = Math.max(24, entries[1].offsetTop - entries[0].offsetTop);
+              } catch (e) {}
+            } else if (entries.length === 1) {
+              try { per = Math.max(24, entries[0].offsetHeight); } catch (e) {}
+            }
+            const fit = Math.max(1, Math.floor(avail / per));
+            enableCompact = entries.length > fit;
+          }
+
+          if (enableCompact) {
+            sidebarEl.classList.add('compact-labels');
+            entries.forEach(ent => {
+              try {
+                const lab = ent.querySelector('.project-entry-label');
+                if (lab) {
+                  lab.textContent = lab.dataset.short || (lab.dataset.full || lab.textContent);
+                  lab.title = lab.dataset.full || lab.title || '';
+                }
+              } catch (e) {}
+            });
+          } else {
+            sidebarEl.classList.remove('compact-labels');
+            entries.forEach(ent => {
+              try {
+                const lab = ent.querySelector('.project-entry-label');
+                if (lab) {
+                  lab.textContent = lab.dataset.full || lab.textContent;
+                  lab.title = lab.dataset.full || lab.title || '';
+                }
+              } catch (e) {}
+            });
+          }
+        } catch (e) { console.warn('updateSidebarLabelMode failed', e); }
+      }
+        try {
+          const wrap = document.getElementById('headerProject');
+          const avatar = document.getElementById('headerProjectAvatar');
+          const nameEl = document.getElementById('headerProjectName');
+          if (!wrap || !avatar || !nameEl) return;
+          if (!dbId) {
+            wrap.style.display = 'none';
+            nameEl.textContent = '';
+            avatar.style.backgroundImage = '';
+            avatar.textContent = '';
+            return;
+          }
+          const safeTitle = title || dbId;
+          nameEl.textContent = safeTitle;
+          nameEl.title = safeTitle;
+          // clear any previous avatar text
+          try { avatar.textContent = ''; } catch (e) {}
+          if (image && image.trim()) {
+            avatar.style.backgroundImage = `url(${image.trim()})`;
+          } else {
+            // show initials
+            const initials = (safeTitle || dbId || '?').toString().replace(/\s+/g, '').slice(0,2).toUpperCase() || '?';
+            avatar.style.backgroundImage = '';
+            avatar.textContent = initials;
+          }
+          wrap.style.display = 'flex';
+        } catch (e) { console.warn('updateHeaderProjectInfo failed', e); }
+      }
+
+      // Play header appear animation and cleanup after finish
+      function playHeaderAppearAnimation() {
+        try {
+          const headerWrap = document.getElementById('headerProject');
+          if (!headerWrap) return;
+          headerWrap.classList.remove('anim-appear');
+          void headerWrap.offsetWidth; // force reflow
+          headerWrap.classList.add('anim-appear');
+          const onEnd = () => { headerWrap.removeEventListener('animationend', onEnd); headerWrap.classList.remove('anim-appear'); };
+          headerWrap.addEventListener('animationend', onEnd);
+        } catch (e) { console.warn('playHeaderAppearAnimation failed', e); }
+      }
+
+      // Select project with sidebar disappear animation and header appear animation,
+      // then navigate (set db param) after animation completes.
+      function selectProjectWithAnimation(dbId, entryEl, title, image) {
+        try {
+          if (!dbId) return;
+          if (!entryEl) { updateHeaderProjectInfo(dbId, title, image); setUrlParam('db', dbId); return; }
+          if (entryEl._animInProgress) return;
+          entryEl._animInProgress = true;
+          // Capture previous header project info so we can re-add it to the sidebar after switching
+          const prevDb = (getUrlParam('db') || '');
+          let prevTitle = '';
+          let prevImage = '';
+          try {
+            const headerName = document.getElementById('headerProjectName');
+            const headerAvatar = document.getElementById('headerProjectAvatar');
+            if (headerName) prevTitle = headerName.textContent || '';
+            if (headerAvatar) {
+              const bg = headerAvatar.style.backgroundImage || '';
+              const m = bg.match(/url\((?:'|\")?(.*?)(?:'|\")?\)/);
+              prevImage = m ? m[1] : '';
+            }
+          } catch (e) {}
+          entryEl.classList.add('anim-disappear');
+          try { updateHeaderProjectInfo(dbId, title, image); } catch (e) {}
+          try { playHeaderAppearAnimation(); } catch (e) {}
+          // hide sidebar for a cleaner UX after selecting a project
+          try { setSidebarCollapsed(true, false); } catch (e) {}
+          const onEnd = () => {
+            entryEl.removeEventListener('animationend', onEnd);
+            try { entryEl.remove(); } catch (e) {}
+            // If there was a previously selected project (prevDb) and it's different from the new one,
+            // re-add it to the top of the sidebar so it doesn't disappear permanently.
+            try {
+              if (prevDb && prevDb !== dbId) {
+                const wrap = document.querySelector('.project-list');
+                if (wrap && !wrap.querySelector('.project-entry[data-db="' + prevDb + '"]')) {
+                  const entry = document.createElement('a');
+                  entry.className = 'project-entry';
+                  entry.href = '#';
+                  entry.setAttribute('data-db', prevDb);
+                  entry.setAttribute('data-image', prevImage || '');
+                  entry.setAttribute('data-title', prevTitle || prevDb);
+                  entry.setAttribute('data-desc', '');
+                  const displayTitle = prevTitle || prevDb;
+                  entry.title = displayTitle + '（双击编辑）';
+                  entry.setAttribute('aria-label', displayTitle);
+                  entry.tabIndex = 0;
+                  if (prevImage) {
+                    const img = document.createElement('span');
+                    img.className = 'project-avatar-img';
+                    img.style.backgroundImage = `url(${prevImage})`;
+                    entry.appendChild(img);
+                  } else {
+                    const initials = (displayTitle || prevDb || '?').replace(/\s+/g, '').slice(0,2).toUpperCase() || '?';
+                    const span = document.createElement('span');
+                    span.className = 'project-initials';
+                    span.textContent = initials;
+                    entry.appendChild(span);
+                  }
+                  const label = document.createElement('span');
+                  label.className = 'project-entry-label';
+                  try {
+                    const base = (displayTitle || prevDb || '').toString().trim();
+                    label.dataset.full = base;
+                    label.dataset.short = Array.from(base).slice(0,3).join('');
+                    // show full title for clarity
+                    label.textContent = base;
+                    label.title = base;
+                    const sidebarEl = document.getElementById('projectSidebar');
+                    const isCollapsed = sidebarEl && sidebarEl.classList.contains('collapsed');
+                    label.setAttribute('aria-hidden', String(!!isCollapsed));
+                  } catch (e) { label.textContent = displayTitle; }
+                  entry.appendChild(label);
+                  // attach handlers
+                  entry.addEventListener('click', (e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    if (entry._clickTimer) return;
+                    entry._clickTimer = setTimeout(() => { entry._clickTimer = null; try { selectProjectWithAnimation(prevDb, entry, displayTitle, entry.getAttribute('data-image') || ''); } catch (err) { try { setUrlParam('db', prevDb); } catch(e){} } }, 260);
+                  });
+                  entry.addEventListener('dblclick', (e) => { e.preventDefault(); e.stopPropagation(); if (entry._clickTimer) { clearTimeout(entry._clickTimer); entry._clickTimer = null; } try { updateHeaderProjectInfo(prevDb, displayTitle, entry.getAttribute('data-image') || ''); } catch (e) {} openEditProjectModal(prevDb, entry.getAttribute('data-title') || '', entry.getAttribute('data-image') || '', entry.getAttribute('data-desc') || ''); });
+                  entry.addEventListener('keydown', (e) => { const key = e.key || e.keyCode; if (key === 'Enter' || key === 13) { e.preventDefault(); try { selectProjectWithAnimation(prevDb, entry, displayTitle, entry.getAttribute('data-image') || ''); } catch (err) { try { setUrlParam('db', prevDb); } catch(e) {} } } });
+                  try { wrap.insertBefore(entry, wrap.firstChild); } catch (e) { wrap.appendChild(entry); }
+                  try { updateSidebarLabelMode(); } catch (e) {}
+                }
+              }
+            } catch (e) { }
+            try { setUrlParam('db', dbId); } catch (e) {}
+            entryEl._animInProgress = false;
+          };
+          entryEl.addEventListener('animationend', onEnd);
+          // fallback in case animationend not fired
+          setTimeout(() => {
+            if (entryEl._animInProgress) {
+              entryEl.removeEventListener('animationend', onEnd);
+              entryEl._animInProgress = false;
+              entryEl.classList.remove('anim-disappear');
+              try { setUrlParam('db', dbId); } catch (e) {}
+            }
+          }, 700);
+        } catch (e) { console.warn('selectProjectWithAnimation failed', e); }
+      }
+
+      function openEditProjectModal(dbId, title, image, desc) {
+        if (!editProjectModal) return;
+        editProjectModal.style.display = 'flex';
+        if (editProjectId) editProjectId.textContent = dbId;
+        if (inputProjectImageUrl) inputProjectImageUrl.value = image || '';
+        if (inputProjectEditTitle) inputProjectEditTitle.value = title || '';
+        if (inputProjectEditDesc) inputProjectEditDesc.value = desc || '';
+        // update preview
+        try { updateEditProjectPreview(image || ''); } catch (e) {}
+        if (editProjectError) editProjectError.style.display = 'none';
+        editProjectModal.dataset.db = dbId;
+        try { (inputProjectEditTitle || inputProjectImageUrl) && (inputProjectEditTitle || inputProjectImageUrl).focus(); } catch(e){}
+      }
+
+      function updateEditProjectPreview(url) {
+        if (!editProjectPreview || !editProjectPreviewImg || !editProjectPreviewStatus) return;
+        const trimmed = (typeof url === 'string' ? url.trim() : '');
+        if (!trimmed) {
+          editProjectPreview.style.display = 'none';
+          editProjectPreviewImg.style.backgroundImage = '';
+          editProjectPreviewStatus.textContent = '';
+          return;
+        }
+        editProjectPreview.style.display = 'flex';
+        editProjectPreviewStatus.textContent = '加载中…';
+        editProjectPreviewImg.style.backgroundImage = '';
+        const img = new Image();
+        img.onload = () => {
+          editProjectPreviewImg.style.backgroundImage = `url(${trimmed})`;
+          editProjectPreviewStatus.textContent = '预览';
+        };
+        img.onerror = () => {
+          editProjectPreviewImg.style.backgroundImage = '';
+          editProjectPreviewStatus.textContent = '加载失败';
+        };
+        img.src = trimmed;
+      }
+
+      function updateCreateProjectPreview(url) {
+        if (!createProjectPreview || !createProjectPreviewImg || !createProjectPreviewStatus) return;
+        const trimmed = (typeof url === 'string' ? url.trim() : '');
+        if (!trimmed) {
+          createProjectPreview.style.display = 'none';
+          createProjectPreviewImg.style.backgroundImage = '';
+          createProjectPreviewStatus.textContent = '';
+          return;
+        }
+        createProjectPreview.style.display = 'flex';
+        createProjectPreviewStatus.textContent = '加载中…';
+        createProjectPreviewImg.style.backgroundImage = '';
+        const img = new Image();
+        img.onload = () => {
+          createProjectPreviewImg.style.backgroundImage = `url(${trimmed})`;
+          createProjectPreviewStatus.textContent = '预览';
+        };
+        img.onerror = () => {
+          createProjectPreviewImg.style.backgroundImage = '';
+          createProjectPreviewStatus.textContent = '加载失败';
+        };
+        img.src = trimmed;
+      }
+
+      if (inputProjectCreateImageUrl) {
+        inputProjectCreateImageUrl.addEventListener('input', (e) => {
+          try { updateCreateProjectPreview(e.target.value || ''); } catch (err) {}
+        });
+      }
+
+      if (inputProjectImageUrl) {
+        inputProjectImageUrl.addEventListener('input', (e) => {
+          try { updateEditProjectPreview(e.target.value || ''); } catch (err) {}
+        });
+      }
+
+      if (btnCancelEditProject) btnCancelEditProject.addEventListener('click', () => { if (editProjectModal) editProjectModal.style.display='none'; });
+
+      if (btnSubmitEditProject) btnSubmitEditProject.addEventListener('click', async () => {
+        if (!editProjectModal) return;
+        const dbId = editProjectModal.dataset.db;
+        if (!dbId) return;
+        const url = inputProjectImageUrl ? inputProjectImageUrl.value.trim() : '';
+        const title = inputProjectEditTitle ? inputProjectEditTitle.value.trim() : '';
+        const desc = inputProjectEditDesc ? inputProjectEditDesc.value.trim() : '';
+        // allow empty URL to remove image
+        // basic trimming done above
+        try {
+          btnSubmitEditProject.disabled = true;
+          const resp = await fetch('/api/kb/update_project', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: dbId, image: url, title: title, description: desc })
+          });
+          // Some servers may return non-JSON (e.g., 404 Not Found with text), so parse safely
+          const respText = await resp.text();
+          let json = null;
+          try { json = respText ? JSON.parse(respText) : null; } catch (e) { json = null; }
+          if (!resp.ok) {
+            const msg = (json && json.message) ? json.message : (respText || `HTTP ${resp.status}`);
+            throw new Error(msg);
+          }
+          if (!json || !(json.success || json.ok)) {
+            const msg = (json && json.message) ? json.message : (respText || '保存失败');
+            throw new Error(msg);
+          }
+          if (editProjectModal) editProjectModal.style.display = 'none';
+          // update UI immediately
+          try { updateProjectEntryInUI(dbId, title, desc, url); } catch(e){}
+          // show toast
+          try { showToast('已保存', 'success'); } catch(e){}
+          // refresh project-selection modal if it's visible
+          try { const modal = document.getElementById('dbSelectModal'); if (modal && modal.style.display && modal.style.display !== 'none' && typeof loadProjectListToModal === 'function') loadProjectListToModal(getUrlParam('db')); } catch (e) {}
+        } catch (err) {
+          if (editProjectError) { editProjectError.textContent = '保存失败：' + (err && err.message ? err.message : err); editProjectError.style.display = 'block'; }
+          try { showToast('保存失败：' + (err && err.message ? err.message : ''), 'error', 4000); } catch (e) {}
+          console.warn('update project failed', err);
+        } finally {
+          try { btnSubmitEditProject.disabled = false; } catch(e){}
+        }
+      });
+
+      document.addEventListener('DOMContentLoaded', () => {
+        // default to collapsed immediately to avoid flicker
+        try { (window.setSidebarCollapsed || setSidebarCollapsed)(true, false); } catch (e) {}
+        // initialize sidebar projects
+        try { loadProjectsToSidebar(); } catch (e) {}
+        // initialize right-side user sidebar
+        try { loadUsersToSidebar(); } catch (e) {}
+        try { setupUserSidebarHover(); } catch (e) {}
+        const btnRefreshUsers = document.getElementById('btnRefreshUsers');
+        if (btnRefreshUsers) {
+          btnRefreshUsers.addEventListener('click', (e) => { e.preventDefault(); try { loadUsersToSidebar(); } catch(err){} });
+        }
+        const btnMoreUsers = document.getElementById('btnMoreUsers');
+        if (btnMoreUsers) {
+          btnMoreUsers.addEventListener('click', (e) => { e.preventDefault(); try { showToast('暂无更多用户', 'info'); } catch(err){} });
+        }
+        const btn = document.getElementById('btnCreateProjectSidebar');
+        if (btn) {
+          btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            try { openCreateProjectModal(); } catch (err) {}
+          });
+        }
+        const more = document.getElementById('btnMoreProjects');
+        if (more) {
+          more.addEventListener('click', (e) => {
+            e.preventDefault();
+            try { showDbSelectModal(true); } catch (err) {}
+          });
+        }
+        // header project click opens project selection modal
+        try {
+          const headerProj = document.getElementById('headerProject');
+          if (headerProj) {
+            headerProj.style.cursor = 'pointer';
+            headerProj.addEventListener('click', (e) => { e.preventDefault(); try { showDbSelectModal(true); } catch (err) {} });
+          }
+        } catch (e) {}
+  // sidebar collapse/expand state
+  const sidebar = document.getElementById('projectSidebar');
+        const split = document.querySelector('.kb-split');
+        const COLLAPSE_KEY = 'kbProjectSidebarCollapsed';
+  // Whether hovering should reveal labels (disabled by default)
+  const ALLOW_HOVER_LABELS = !!(window && window.SIDEBAR_ALLOW_HOVER_LABELS);
+        // clicking on sidebar background (not on an entry) will expand/collapse for convenience
+        // Disabled by default; enable by setting window.SIDEBAR_ALLOW_EXPAND_ON_CLICK = true
+        const ALLOW_SIDEBAR_EXPAND_ON_CLICK = !!(window && window.SIDEBAR_ALLOW_EXPAND_ON_CLICK);
+        if (sidebar) {
+          sidebar.addEventListener('click', (e) => {
+            // ignore clicks on controls or project entries (entries handle their own clicks)
+            if (!e.target || !e.target.closest) return;
+            if (e.target.closest('.project-entry') || e.target.closest('button') || e.target.closest('.btn') || e.target.closest('a')) return;
+            if (!ALLOW_SIDEBAR_EXPAND_ON_CLICK) return;
+            const collapsed = sidebar.classList.contains('collapsed');
+            // Toggle without persisting the preference so mouse-driven auto-collapse still works
+            try { (window.setSidebarCollapsed || setSidebarCollapsed)(!collapsed, false); } catch (e) {}
+          });
+          // Hover behavior: only expand when mouse is over a project avatar/entry; collapse shortly after leaving entries
+          let sidebarHoverExpanded = false;
+          let _sidebarHoverTimer = null;
+          try {
+            const projectListEl = sidebar.querySelector('.project-list');
+            if (projectListEl) {
+              if (ALLOW_HOVER_LABELS) {
+                // Expand popover labels when pointer moves over any project entry (no width change)
+                projectListEl.addEventListener('mouseover', (e) => {
+                  try {
+                    const entry = e.target && e.target.closest ? e.target.closest('.project-entry') : null;
+                    if (!entry) return;
+                    if (_sidebarHoverTimer) { clearTimeout(_sidebarHoverTimer); _sidebarHoverTimer = null; }
+                    // when hovering an entry, reveal labels (popover) without changing sidebar width
+                    try { sidebar.classList.add('hover-expanded'); } catch (err) {}
+                    try { sidebar.classList.add('no-sidebar-transition'); if (split) split.classList.add('no-sidebar-transition'); } catch (err) {}
+                    // if compact mode is active, temporarily show full title for this hovered entry
+                    try {
+                      const lab = entry.querySelector('.project-entry-label');
+                      if (lab && lab.dataset && lab.dataset.full) {
+                        // revert other labels to short form in compact mode, then show full for hovered
+                        try {
+                          if (sidebar.classList.contains('compact-labels')) {
+                            const others = sidebar.querySelectorAll('.project-entry-label');
+                            others.forEach(o => { if (o !== lab && o.dataset && o.dataset.short) { try { o.textContent = o.dataset.short; } catch(e){} } });
+                          }
+                        } catch(e) {}
+                        lab.textContent = lab.dataset.full;
+                        lab.title = lab.dataset.full;
+                      }
