@@ -1083,6 +1083,11 @@
     } catch (e) {
       console.error("renderAttrList failed", e);
     }
+    // Update count badge
+    try {
+      const badge = document.getElementById("attrCountBadge");
+      if (badge) badge.textContent = items.length;
+    } catch {}
     syncDetailAttrList(items, fullId);
   }
 

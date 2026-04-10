@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
@@ -444,439 +444,200 @@
             <button id="btnMoreProjects" class="btn sm" title="更多项目" aria-label="更多项目">•••</button>
           </div>
         </aside>
-        <!-- Left: form panel -->
+        <!-- Left: Wikidata-style entity editor panel -->
         <div class="panel column-panel editor-panel">
-          <form
-            id="nodeForm"
-            style="display: grid; grid-template-columns: 1fr; gap: 8px"
-          >
-            <input type="hidden" id="fId" />
-            <div class="field">
-              <label class="muted">名称（必填）</label>
-              <input
-                id="fName"
-                type="text"
-                placeholder="例如：乔治·华盛顿"
-                required
-                style="width: 100%"
-              />
+          <!-- Entity header (Wikidata-style) -->
+          <div id="entityHeader" class="wd-entity-header">
+            <div class="wd-entity-header-top">
+              <h2 id="entityDisplayName" class="wd-entity-name">新建实体</h2>
+              <span id="entityIdBadge" class="wd-entity-id-badge" style="display:none"></span>
             </div>
-            <div class="field">
-              <label class="muted">描述</label>
-              <input
-                id="fDesc"
-                type="text"
-                placeholder="简要描述"
-                style="width: 100%"
-              />
+            <p id="entityDisplayDesc" class="wd-entity-desc">点击此处添加描述</p>
+            <div id="entityDisplayAliases" class="wd-entity-aliases" style="display:none">
+              <span class="wd-alias-label">也称为：</span>
+              <span id="entityAliasValues" class="wd-alias-values"></span>
             </div>
-            <div class="field">
-              <label class="muted">别名（用逗号、空格或中文逗号分隔）</label>
-              <input
-                id="fAliases"
-                type="text"
-                placeholder="华盛顿, Washington"
-                style="width: 100%"
-              />
-            </div>
-            <div class="field">
-              <label class="muted">标签（用逗号、空格或中文逗号分隔）</label>
-              <input
-                id="fTags"
-                type="text"
-                placeholder="总统, 美国"
-                style="width: 100%"
-              />
-            </div>
-            <div class="field">
-              <label class="muted">类型（Type）</label>
-              <input
-                id="fType"
-                type="text"
-                placeholder="例如：人物, 组织, 地点"
-                list="fTypeOptions"
-                style="width: 100%"
-                autocomplete="off"
-              />
-              <datalist id="fTypeOptions"></datalist>
-            </div>
-            <div
-              style="
-                display: flex;
-                gap: 8px;
-                align-items: center;
-                flex-wrap: wrap;
-              "
-            >
-              <button
-                id="btnSubmit"
-                class="btn icon"
-                type="submit"
-                title="新增"
-                aria-label="新增"
-              >
-                <i class="fa-solid fa-plus"></i>
-              </button>
-              <button
-                id="btnCancelEdit"
-                class="btn icon"
-                type="button"
-                style="display: none"
-                title="取消编辑"
-                aria-label="取消编辑"
-              >
-                <i class="fa-solid fa-xmark"></i>
-              </button>
-              <span id="addMsg" class="muted"></span>
-            </div>
-          </form>
+          </div>
 
-          <!-- Attribute manager (non-relationship literal properties) -->
-          <div
-            id="attrPanel"
-            style="
-              margin-top: 14px;
-              display: none;
-              flex: 1;
-              flex-direction: column;
-            "
-          >
-            <div class="attr-panel-card" style="position: relative; z-index: 2">
-              <!-- Inline property picker -->
-              <div id="attrPropPicker" style="margin-bottom:8px;">
-                <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">
-                  <input id="attrPropSearch" type="text" placeholder="搜索属性（默认全局搜索）…" autocomplete="off"
-                    style="flex:1;font-size:12px;padding:4px 8px;border-radius:4px;border:1px solid var(--border);background:var(--surface-1);color:var(--text);" />
-                  <button id="btnAttrPropSearchAll" type="button" class="btn"
-                    style="font-size:12px;padding:4px 8px;white-space:nowrap;">关联搜索</button>
-                  <span id="attrPropPickerStatus" class="muted" style="font-size:11px;"></span>
+          <!-- Collapsible node form (hidden by default, shown on edit/create) -->
+          <div id="nodeFormSection" class="wd-section">
+            <div class="wd-section-header" data-toggle="nodeFormBody">
+              <i class="fa-solid fa-pen-to-square wd-section-icon"></i>
+              <span>基本信息</span>
+              <button id="btnToggleNodeForm" type="button" class="wd-collapse-btn" title="收起/展开">
+                <i class="fa-solid fa-chevron-up"></i>
+              </button>
+            </div>
+            <div id="nodeFormBody" class="wd-section-body">
+              <form id="nodeForm" class="wd-form">
+                <input type="hidden" id="fId" />
+                <div class="wd-field">
+                  <label class="wd-field-label" for="fName">名称 <span class="wd-required">*</span></label>
+                  <input id="fName" type="text" class="wd-input" placeholder="例如：乔治·华盛顿" required />
                 </div>
-                <select id="attrPropPickerList" size="5"
-                  style="width:100%;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--surface-1);color:inherit;padding:2px 0;cursor:pointer;">
-                </select>
-              </div>
-              <div
-                class="muted"
-                id="attrCurrentProp"
-                style="margin-bottom: 8px"
-              >
-                当前属性：未选择
-              </div>
-              <form
-                id="attrForm"
-                style="
-                  display: grid;
-                  grid-template-columns: 1fr;
-                  gap: 8px;
-                  align-items: end;
-                "
-              >
-                <input type="hidden" id="attrId" />
-                <!-- Hidden carriers to support backend update; creation will be set from right-panel selection -->
-                <input type="hidden" id="attrProp" />
-                <input type="hidden" id="attrPropLabel" />
-                <input type="hidden" id="attrType" />
-                <div
-                  id="attrValueWrap"
-                  class="field"
-                  style="display: flex; flex-direction: column; gap: 6px"
-                >
-                  <label style="color: var(--muted); font-size: 12px"
-                    >属性值</label
-                  >
-                  <!-- Dynamic datatype input groups -->
-                  <div
-                    id="attrDatatypeGroups"
-                    style="display: flex; flex-direction: column; gap: 8px"
-                  >
-                    <!-- string / default -->
-                    <div
-                      class="dtype-group"
-                      data-dtype="string"
-                      style="display: flex; gap: 6px"
-                    >
-                      <input
-                        id="attrValue"
-                        type="text"
-                        placeholder="文本，例如：示例内容"
-                        style="flex: 1"
-                      />
-                    </div>
-                    <!-- url -->
-                    <div
-                      class="dtype-group"
-                      data-dtype="url"
-                      style="display: none; gap: 6px"
-                    >
-                      <input
-                        id="attrValueUrl"
-                        type="url"
-                        placeholder="https://example.com"
-                        style="flex: 1"
-                      />
-                    </div>
-                    <!-- time (date) -->
-                    <div
-                      class="dtype-group"
-                      data-dtype="time"
-                      style="display: none; gap: 6px"
-                    >
-                      <input id="attrValueDate" type="date" style="flex: 1" />
-                    </div>
-                    <!-- quantity -->
-                    <div
-                      class="dtype-group"
-                      data-dtype="quantity"
-                      style="display: none; flex-wrap: wrap; gap: 6px"
-                    >
-                      <input
-                        id="attrValueAmount"
-                        type="number"
-                        step="any"
-                        placeholder="数值"
-                        style="flex: 1; min-width: 120px"
-                      />
-                      <input
-                        id="attrValueUnit"
-                        type="text"
-                        placeholder="单位 (可选)"
-                        style="flex: 1; min-width: 120px"
-                      />
-                    </div>
-                    <!-- globecoordinate -->
-                    <div
-                      class="dtype-group"
-                      data-dtype="globecoordinate"
-                      style="display: none; flex-wrap: wrap; gap: 6px"
-                    >
-                      <input
-                        id="attrValueLat"
-                        type="number"
-                        step="any"
-                        placeholder="纬度"
-                        style="flex: 1; min-width: 120px"
-                      />
-                      <input
-                        id="attrValueLon"
-                        type="number"
-                        step="any"
-                        placeholder="经度"
-                        style="flex: 1; min-width: 120px"
-                      />
-                    </div>
-                    <!-- commonsMedia (image upload) -->
-                    <div
-                      class="dtype-group"
-                      data-dtype="commonsMedia"
-                      style="display: none; flex-direction: column; gap: 8px"
-                    >
-                      <div style="display: flex; gap: 6px; align-items: center">
-                        <input
-                          id="attrValueImage"
-                          type="file"
-                          accept="image/*"
-                          style="display: none"
-                        />
-                        <button
-                          id="btnAttrImageUpload"
-                          type="button"
-                          class="btn"
-                          style="display: flex; align-items: center; gap: 6px"
-                          title="上传图像"
-                        >
-                          <i class="fa-solid fa-cloud-arrow-up"></i>
-                          <span>上传图像</span>
-                        </button>
-                        <span id="attrImageStateText" class="muted" style="flex: 1; min-height: 20px; font-size: 12px"></span>
-                      </div>
-                      <div style="display: flex; gap: 6px; align-items: center; margin-top: 2px">
-                        <input
-                          id="attrValueImageUrl"
-                          type="text"
-                          placeholder="图片地址（上传后自动填入，或手动输入URL）"
-                          style="flex: 1; font-size: 12px"
-                        />
-                        <button type="button" id="btnAttrImageClear" class="btn icon" title="清除图片">
-                          <i class="fa-solid fa-xmark"></i>
-                        </button>
-                      </div>
-                      <div
-                        id="attrImagePreview"
-                        style="display: none; margin-top: 4px"
-                      >
-                        <img
-                          id="attrImagePreviewImg"
-                          style="max-width: 200px; max-height: 150px; border: 1px solid var(--border); border-radius: 4px"
-                        />
-                        <span id="attrImageFileName" class="muted" style="font-size: 12px; display: block; margin-top: 4px"></span>
-                      </div>
-                    </div>
-                    <!-- wikibase-entityid -->
-                    <div
-                      class="dtype-group"
-                      data-dtype="wikibase-entityid"
-                      style="display: none; flex-direction: column; gap: 8px"
-                    >
-                      <div style="display: flex; gap: 6px; align-items: center">
-                        <input
-                          id="attrEntitySearchInput"
-                          type="text"
-                          placeholder="输入关键词后回车检索实体"
-                          style="flex: 1"
-                          autocomplete="off"
-                        />
-                        <span
-                          id="attrEntitySearchStatus"
-                          class="muted"
-                          style="min-width: 140px"
-                        ></span>
-                      </div>
-                      <div
-                        id="attrEntitySearchResultsWrap"
-                        style="display: none"
-                      >
-                        <select
-                          id="attrEntitySearchResults"
-                          size="10"
-                          style="width: 100%; min-height: 150px"
-                        ></select>
-                      </div>
-                      <div
-                        id="attrEntitySelectedPreview"
-                        class="muted"
-                        style="font-size: 12px"
-                      >
-                        当前未选择实体
-                      </div>
-                      <input id="attrValueEntityType" type="hidden" />
-                      <input id="attrValueEntityId" type="hidden" />
-                      <input id="attrValueEntityNumericId" type="hidden" />
-                    </div>
+                <div class="wd-field">
+                  <label class="wd-field-label" for="fDesc">描述</label>
+                  <input id="fDesc" type="text" class="wd-input" placeholder="简要描述" />
+                </div>
+                <div class="wd-field">
+                  <label class="wd-field-label" for="fAliases">别名</label>
+                  <input id="fAliases" type="text" class="wd-input" placeholder="用逗号分隔，如：华盛顿, Washington" />
+                </div>
+                <div class="wd-field-row">
+                  <div class="wd-field" style="flex:1">
+                    <label class="wd-field-label" for="fTags">标签</label>
+                    <input id="fTags" type="text" class="wd-input" placeholder="总统, 美国" />
                   </div>
-                  <div style="margin-top: 8px;">
-                      <input
-                        id="attrValueQualifier"
-                        type="text"
-                        class="kb-input"
-                        placeholder="限定信息 (可选)"
-                        style="width: 100%;"
-                      />
-                  </div>
-                  <div
-                    id="attrDatatypeHint"
-                    class="muted"
-                    style="font-size: 11px"
-                  >
-                    数据类型：未确定（默认文本）
+                  <div class="wd-field" style="flex:1">
+                    <label class="wd-field-label" for="fType">类型</label>
+                    <input id="fType" type="text" class="wd-input" placeholder="人物, 组织, 地点" list="fTypeOptions" autocomplete="off" />
+                    <datalist id="fTypeOptions"></datalist>
                   </div>
                 </div>
-                <div
-                  style="
-                    display: flex;
-                    gap: 8px;
-                    align-items: center;
-                    flex-wrap: wrap;
-                  "
-                >
-                  <button
-                    id="btnAttrSave"
-                    class="btn icon"
-                    type="submit"
-                    title="保存属性"
-                    aria-label="保存属性"
-                  >
-                    <i class="fa-solid fa-floppy-disk"></i>
+                <div class="wd-form-actions">
+                  <button id="btnSubmit" class="btn wd-btn-primary" type="submit">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>新增实体</span>
                   </button>
-                  <button
-                    id="btnAttrReset"
-                    class="btn icon"
-                    type="button"
-                    title="清空"
-                    aria-label="清空"
-                  >
-                    <i class="fa-solid fa-eraser"></i>
+                  <button id="btnCancelEdit" class="btn wd-btn-secondary" type="button" style="display:none">
+                    <i class="fa-solid fa-xmark"></i>
+                    <span>取消</span>
                   </button>
-                  <span id="attrMsg" class="muted"></span>
+                  <span id="addMsg" class="wd-msg"></span>
                 </div>
               </form>
-              <!-- Attribute selection actions -->
-              <div
-                id="attrActions"
-                class="table-toolbar"
-                style="
-                  display: flex;
-                  gap: 8px;
-                  align-items: center;
-                  margin-top: 8px;
-                "
-              >
-                <button
-                  id="btnAttrEditSelected"
-                  class="btn icon"
-                  type="button"
-                  disabled
-                  title="编辑选中属性"
-                  aria-label="编辑选中属性"
-                >
-                  <i class="fa-solid fa-pen"></i>
-                </button>
-                <button
-                  id="btnAttrDeleteSelected"
-                  class="btn icon"
-                  type="button"
-                  disabled
-                  title="删除选中属性"
-                  aria-label="删除选中属性"
-                >
-                  <i class="fa-solid fa-trash"></i>
-                </button>
-                </div>
             </div>
-            <div
-              id="attrList"
-              style="
-                margin-top: 8px;
-                border-top: 1px dashed var(--border);
-                overflow-y: auto;
-                max-height: 560px;
-              "
-            ></div>
-            <style>
-              #attrPanel {
-                display: flex;
-                flex-direction: column;
-                height: 100%;
-              }
+          </div>
 
-              #attrList {
-                flex: 1;
-                margin-top: 8px;
-                border-top: 1px dashed var(--border);
-                padding: 8px 0;
-                overflow-y: auto;
-                scrollbar-width: none;
-                /* Firefox */
-              }
-
-              #detailAttrList {
-                flex: 1;
-                margin-top: 8px;
-                padding-top: 6px;
-                overflow-y: auto;
-                scrollbar-width: none;
-                font-size: 12px;
-              }
-
-              /* Make detail list separators match left attrList */
-              #detailAttrList > div + div {
-                border-top: 1px dashed var(--border);
-              }
-
-              #attrList::-webkit-scrollbar {
-                display: none;
-                /* Chrome, Safari */
-              }
-            </style>
+          <!-- Statements / Attributes section (Wikidata-style) -->
+          <div id="attrPanel" class="wd-section" style="display:none; flex:1; flex-direction:column;">
+            <div class="wd-section-header" data-toggle="attrFormBody">
+              <i class="fa-solid fa-list-check wd-section-icon"></i>
+              <span>声明</span>
+              <span id="attrCountBadge" class="wd-count-badge">0</span>
+              <button id="btnToggleAttrForm" type="button" class="wd-collapse-btn" title="收起/展开添加表单">
+                <i class="fa-solid fa-chevron-up"></i>
+              </button>
+            </div>
+            <div id="attrFormBody" class="wd-section-body">
+              <div class="attr-panel-card wd-statement-form" style="position:relative; z-index:2">
+                <!-- Property picker -->
+                <div id="attrPropPicker" class="wd-prop-picker">
+                  <div class="wd-prop-search-row">
+                    <div class="wd-prop-search-wrap">
+                      <i class="fa-solid fa-magnifying-glass wd-prop-search-icon"></i>
+                      <input id="attrPropSearch" type="text" class="wd-input" placeholder="搜索属性…" autocomplete="off" />
+                    </div>
+                    <button id="btnAttrPropSearchAll" type="button" class="btn wd-btn-outline" title="在全局属性库中搜索">
+                      <i class="fa-solid fa-globe"></i>
+                    </button>
+                    <span id="attrPropPickerStatus" class="wd-msg" style="font-size:11px;"></span>
+                  </div>
+                  <select id="attrPropPickerList" size="4" class="wd-prop-list"></select>
+                </div>
+                <div class="muted wd-current-prop" id="attrCurrentProp">当前属性：未选择</div>
+                <!-- Attribute value form -->
+                <form id="attrForm" class="wd-attr-form">
+                  <input type="hidden" id="attrId" />
+                  <input type="hidden" id="attrProp" />
+                  <input type="hidden" id="attrPropLabel" />
+                  <input type="hidden" id="attrType" />
+                  <div id="attrValueWrap" class="wd-value-wrap">
+                    <label class="wd-field-label">属性值</label>
+                    <div id="attrDatatypeGroups" class="wd-dtype-groups">
+                      <!-- string / default -->
+                      <div class="dtype-group" data-dtype="string" style="display:flex; gap:6px">
+                        <input id="attrValue" type="text" class="wd-input" placeholder="文本值" style="flex:1" />
+                      </div>
+                      <!-- url -->
+                      <div class="dtype-group" data-dtype="url" style="display:none; gap:6px">
+                        <input id="attrValueUrl" type="url" class="wd-input" placeholder="https://example.com" style="flex:1" />
+                      </div>
+                      <!-- time (date) -->
+                      <div class="dtype-group" data-dtype="time" style="display:none; gap:6px">
+                        <input id="attrValueDate" type="date" class="wd-input" style="flex:1" />
+                      </div>
+                      <!-- quantity -->
+                      <div class="dtype-group" data-dtype="quantity" style="display:none; flex-wrap:wrap; gap:6px">
+                        <input id="attrValueAmount" type="number" step="any" class="wd-input" placeholder="数值" style="flex:1; min-width:100px" />
+                        <input id="attrValueUnit" type="text" class="wd-input" placeholder="单位（可选）" style="flex:1; min-width:100px" />
+                      </div>
+                      <!-- globecoordinate -->
+                      <div class="dtype-group" data-dtype="globecoordinate" style="display:none; flex-wrap:wrap; gap:6px">
+                        <input id="attrValueLat" type="number" step="any" class="wd-input" placeholder="纬度" style="flex:1; min-width:100px" />
+                        <input id="attrValueLon" type="number" step="any" class="wd-input" placeholder="经度" style="flex:1; min-width:100px" />
+                      </div>
+                      <!-- commonsMedia (image upload) -->
+                      <div class="dtype-group" data-dtype="commonsMedia" style="display:none; flex-direction:column; gap:8px">
+                        <div style="display:flex; gap:6px; align-items:center">
+                          <input id="attrValueImage" type="file" accept="image/*" style="display:none" />
+                          <button id="btnAttrImageUpload" type="button" class="btn wd-btn-outline" title="上传图像">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                            <span>上传图像</span>
+                          </button>
+                          <span id="attrImageStateText" class="wd-msg" style="flex:1; min-height:20px; font-size:12px"></span>
+                        </div>
+                        <div style="display:flex; gap:6px; align-items:center">
+                          <input id="attrValueImageUrl" type="text" class="wd-input" placeholder="图片地址" style="flex:1" />
+                          <button type="button" id="btnAttrImageClear" class="btn wd-btn-icon" title="清除图片">
+                            <i class="fa-solid fa-xmark"></i>
+                          </button>
+                        </div>
+                        <div id="attrImagePreview" style="display:none; margin-top:4px">
+                          <img id="attrImagePreviewImg" style="max-width:200px; max-height:150px; border:1px solid var(--border); border-radius:6px" />
+                          <span id="attrImageFileName" class="wd-msg" style="font-size:12px; display:block; margin-top:4px"></span>
+                        </div>
+                      </div>
+                      <!-- wikibase-entityid -->
+                      <div class="dtype-group" data-dtype="wikibase-entityid" style="display:none; flex-direction:column; gap:8px">
+                        <div style="display:flex; gap:6px; align-items:center">
+                          <input id="attrEntitySearchInput" type="text" class="wd-input" placeholder="输入关键词后回车检索实体" style="flex:1" autocomplete="off" />
+                          <span id="attrEntitySearchStatus" class="wd-msg" style="min-width:120px"></span>
+                        </div>
+                        <div id="attrEntitySearchResultsWrap" style="display:none">
+                          <select id="attrEntitySearchResults" size="8" class="wd-prop-list" style="min-height:120px"></select>
+                        </div>
+                        <div id="attrEntitySelectedPreview" class="wd-msg" style="font-size:12px">当前未选择实体</div>
+                        <input id="attrValueEntityType" type="hidden" />
+                        <input id="attrValueEntityId" type="hidden" />
+                        <input id="attrValueEntityNumericId" type="hidden" />
+                      </div>
+                    </div>
+                    <!-- Qualifier -->
+                    <div class="wd-qualifier-row">
+                      <i class="fa-solid fa-code-branch wd-qualifier-icon"></i>
+                      <input id="attrValueQualifier" type="text" class="wd-input" placeholder="限定信息（可选）" />
+                    </div>
+                    <div id="attrDatatypeHint" class="wd-dtype-hint">
+                      <i class="fa-solid fa-circle-info"></i>
+                      数据类型：未确定（默认文本）
+                    </div>
+                  </div>
+                  <div class="wd-form-actions">
+                    <button id="btnAttrSave" class="btn wd-btn-primary" type="submit" title="保存属性">
+                      <i class="fa-solid fa-floppy-disk"></i>
+                      <span>保存</span>
+                    </button>
+                    <button id="btnAttrReset" class="btn wd-btn-secondary" type="button" title="清空">
+                      <i class="fa-solid fa-eraser"></i>
+                      <span>清空</span>
+                    </button>
+                    <span id="attrMsg" class="wd-msg"></span>
+                  </div>
+                </form>
+                <!-- Attribute selection toolbar -->
+                <div id="attrActions" class="wd-attr-toolbar">
+                  <button id="btnAttrEditSelected" class="btn wd-btn-icon" type="button" disabled title="编辑选中属性">
+                    <i class="fa-solid fa-pen"></i>
+                  </button>
+                  <button id="btnAttrDeleteSelected" class="btn wd-btn-icon" type="button" disabled title="删除选中属性">
+                    <i class="fa-solid fa-trash"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <!-- Attribute list (Wikidata statement style) -->
+            <div id="attrList" class="wd-statement-list"></div>
           </div>
         </div>
         <!-- Center: graph / table panel -->
@@ -1979,12 +1740,6 @@
               </div>
             </div>
           </div>
-          <div id="legendPanel" class="legend panel" style="display: none">
-            <div style="font-size: 12px; color: var(--muted)">
-              提示：
-              双击空白处居中；滚轮缩放；拖动画布；点击节点可在左侧编辑；点击边可载入上方表单进行编辑；使用“选起点/选终点”可在图上点击节点填充。
-            </div>
-          </div>
           <!-- Chat panel (embedded demo/chat.html) -->
           <div id="chatPanel" class="panel" style="padding:12px; display: none; min-height: 0; box-sizing: border-box;">
             <!-- Embedded chat app (lazy-initialized). Code copied from demo/chat.html and scoped to #chatRoot -->
@@ -2225,7 +1980,7 @@
                 <div id="tagMsg" class="muted" style="font-size:12px;margin-top:4px;"></div>
                 <!-- 分类标签说明 -->
                 <div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);">
-                  <div class="muted" style="font-size:11px;line-height:1.5;">分类标签用于可视化筛选与样式区分，节点继承所属分类的标签。</div>
+                  <div class="muted" style="font-size:11px;line-height:1.5;">点击标签可快捷为当前实体打标签（高亮 = 已应用）。分类标签用于可视化筛选与样式区分。</div>
                 </div>
               </div>
             </section>
@@ -2821,7 +2576,6 @@
   const btnViewChat = document.getElementById("btnViewChat");
       const tbTableControls = document.getElementById("tbTableControls");
       const tbAttrControls = document.getElementById("tbAttrControls");
-      const tbVisControls = document.getElementById("tbVisControls");
       const tbCleanControls = document.getElementById("tbCleanControls");
       const tbDetailControls = document.getElementById("tbDetailControls");
       const entryPanel = document.getElementById("entryPanel");
@@ -2842,7 +2596,6 @@
       const cleanPanel = document.getElementById("cleanPanel");
       const relPanel = document.getElementById("relPanel");
       const cywrap = document.getElementById("cywrap");
-      const legendPanel = document.getElementById("legendPanel");
       const detailPanel = document.getElementById("detailPanel");
       const tblSearch = document.getElementById("tblSearch");
       const btnTableAdd = document.getElementById("btnTableAdd");
@@ -7213,6 +6966,62 @@
           if (visSearchInput) visSearchInput.focus();
         });
 
+        // Settings button – opens search/filter
+        const cyBtnSettings = document.getElementById('cy_btnSettings');
+        if (cyBtnSettings) cyBtnSettings.addEventListener('click', () => {
+          if (visSearchInput) { visSearchInput.focus(); visSearchInput.select(); }
+        });
+
+        // --- Interaction mode: Pointer / Box-select / Comment ---
+        let visInteractionMode = 'pointer'; // 'pointer' | 'select' | 'comment'
+        const cyBtnPointer = document.getElementById('cy_btnPointer');
+        const cyBtnSelectTool = document.getElementById('cy_btnSelect');
+        const cyBtnComment = document.getElementById('cy_btnComment');
+        const leftToolBtns = [cyBtnPointer, cyBtnSelectTool, cyBtnComment].filter(Boolean);
+
+        function setVisInteractionMode(mode) {
+          visInteractionMode = mode;
+          leftToolBtns.forEach(b => b.classList.remove('active'));
+          if (mode === 'pointer' && cyBtnPointer) cyBtnPointer.classList.add('active');
+          if (mode === 'select' && cyBtnSelectTool) cyBtnSelectTool.classList.add('active');
+          if (mode === 'comment' && cyBtnComment) cyBtnComment.classList.add('active');
+          if (!window.kbCy) return;
+          if (mode === 'select') {
+            // Enable box selection: disable panning so drag = box select
+            window.kbCy.userPanningEnabled(false);
+            window.kbCy.boxSelectionEnabled(true);
+            window.kbCy.autoungrabify(true);
+          } else {
+            // Default pointer mode: normal panning and node dragging
+            window.kbCy.userPanningEnabled(true);
+            window.kbCy.boxSelectionEnabled(false);
+            window.kbCy.autoungrabify(false);
+          }
+        }
+        if (cyBtnPointer) cyBtnPointer.addEventListener('click', () => setVisInteractionMode('pointer'));
+        if (cyBtnSelectTool) cyBtnSelectTool.addEventListener('click', () => setVisInteractionMode('select'));
+        if (cyBtnComment) cyBtnComment.addEventListener('click', () => {
+          setVisInteractionMode('comment');
+          // In comment mode, click on a node to prompt for annotation
+          if (!window.kbCy) return;
+          // Remove previous one-time listener if any
+          window.kbCy.off('tap.comment');
+          window.kbCy.on('tap.comment', 'node', (evt) => {
+            if (visInteractionMode !== 'comment') return;
+            const node = evt.target;
+            const currentLabel = node.data('label') || node.data('name') || '';
+            const note = window.prompt(`为节点 "${currentLabel}" 添加标注：`, node.data('_comment') || '');
+            if (note === null) return;
+            node.data('_comment', note);
+            // Show a scratch label if note is set
+            if (note) {
+              node.style('label', currentLabel + '\n📝 ' + note);
+            } else {
+              node.style('label', currentLabel);
+            }
+          });
+        });
+
         // Selected count updates
         function updateSelectedCount() {
           const el = document.getElementById('cyCountSelected');
@@ -7350,9 +7159,20 @@
         fAliases.value = "";
         fTags.value = "";
         if (fType) fType.value = "";
-        btnSubmit.textContent = "新增";
+        btnSubmit.innerHTML = '<i class="fa-solid fa-plus"></i><span>新增实体</span>';
         btnCancelEdit.style.display = "none";
         addMsg.textContent = "";
+        // Reset entity header
+        try {
+          const eName = document.getElementById('entityDisplayName');
+          const eDesc = document.getElementById('entityDisplayDesc');
+          const eBadge = document.getElementById('entityIdBadge');
+          const eAliases = document.getElementById('entityDisplayAliases');
+          if (eName) eName.textContent = '新建实体';
+          if (eDesc) eDesc.textContent = '点击此处添加描述';
+          if (eBadge) eBadge.style.display = 'none';
+          if (eAliases) eAliases.style.display = 'none';
+        } catch {}
         // remove highlight
         try {
           if (window.kbCy)
@@ -7374,25 +7194,62 @@
         try {
           if (typeof window.loadAttrPropPicker === "function") window.loadAttrPropPicker("");
         } catch {}
+        // Refresh right sidebar tag highlights
+        try {
+          if (typeof window.refreshTagListHighlight === "function") window.refreshTagListHighlight();
+        } catch {}
       }
       function setFormToEdit(node) {
         const id = (node && (node._id || node.id)) || "";
         fId.value = id;
-        fName.value = node?.label_zh || node?.label || node?.name || "";
-        fDesc.value = node?.desc_zh || node?.description || node?.desc || "";
+        const nameVal = node?.label_zh || node?.label || node?.name || "";
+        fName.value = nameVal;
+        const descVal = node?.desc_zh || node?.description || node?.desc || "";
+        fDesc.value = descVal;
         const aliasSource =
           node?.aliases_zh ?? node?.aliases ?? node?.alias ?? [];
         fAliases.value = toListString(aliasSource);
         const tagSource = node?.tags ?? node?.tag_list ?? [];
         fTags.value = toListString(tagSource);
         if (fType) fType.value = node?.type || "";
-        btnSubmit.textContent = "保存";
+        btnSubmit.innerHTML = '<i class="fa-solid fa-floppy-disk"></i><span>保存修改</span>';
         btnCancelEdit.style.display = "";
+        // Update entity header
+        try {
+          const eName = document.getElementById('entityDisplayName');
+          const eDesc = document.getElementById('entityDisplayDesc');
+          const eBadge = document.getElementById('entityIdBadge');
+          const eAliases = document.getElementById('entityDisplayAliases');
+          const eAliasVals = document.getElementById('entityAliasValues');
+          if (eName) eName.textContent = nameVal || '未命名实体';
+          if (eDesc) eDesc.textContent = descVal || '暂无描述';
+          if (eBadge) {
+            if (id) {
+              eBadge.textContent = id;
+              eBadge.style.display = '';
+            } else {
+              eBadge.style.display = 'none';
+            }
+          }
+          if (eAliases && eAliasVals) {
+            const aliasStr = toListString(aliasSource);
+            if (aliasStr) {
+              eAliasVals.textContent = aliasStr;
+              eAliases.style.display = '';
+            } else {
+              eAliases.style.display = 'none';
+            }
+          }
+        } catch {}
         // Load property picker for this node's type
         try {
           if (typeof window.loadAttrPropPicker === "function") {
             window.loadAttrPropPicker(node?.type || "");
           }
+        } catch {}
+        // Refresh right sidebar tag highlights
+        try {
+          if (typeof window.refreshTagListHighlight === "function") window.refreshTagListHighlight();
         } catch {}
       }
 
@@ -7546,6 +7403,57 @@
 
       btnCancelEdit.addEventListener("click", () => {
         resetFormToAdd();
+      });
+
+      // Wikidata-style section collapse toggles
+      document.querySelectorAll('.wd-section-header[data-toggle]').forEach(header => {
+        header.addEventListener('click', e => {
+          if (e.target.closest('button')) return; // let button handle itself
+          const targetId = header.getAttribute('data-toggle');
+          const body = document.getElementById(targetId);
+          const collapseBtn = header.querySelector('.wd-collapse-btn');
+          if (body) {
+            body.classList.toggle('collapsed');
+            if (collapseBtn) collapseBtn.classList.toggle('collapsed', body.classList.contains('collapsed'));
+          }
+        });
+      });
+      document.querySelectorAll('.wd-collapse-btn').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          const header = btn.closest('.wd-section-header');
+          const targetId = header?.getAttribute('data-toggle');
+          const body = targetId ? document.getElementById(targetId) : null;
+          if (body) {
+            body.classList.toggle('collapsed');
+            btn.classList.toggle('collapsed', body.classList.contains('collapsed'));
+          }
+        });
+      });
+
+      // Sync entity header live as user types in the form
+      fName.addEventListener('input', () => {
+        const el = document.getElementById('entityDisplayName');
+        if (el) el.textContent = fName.value || (fId.value ? '未命名实体' : '新建实体');
+      });
+      fDesc.addEventListener('input', () => {
+        const el = document.getElementById('entityDisplayDesc');
+        if (el) el.textContent = fDesc.value || '点击此处添加描述';
+      });
+      fAliases.addEventListener('input', () => {
+        const el = document.getElementById('entityDisplayAliases');
+        const vals = document.getElementById('entityAliasValues');
+        if (el && vals) {
+          const v = (fAliases.value || '').trim();
+          if (v) { vals.textContent = v; el.style.display = ''; }
+          else { el.style.display = 'none'; }
+        }
+      });
+      // Refresh right sidebar tag highlights when entity tags change
+      fTags.addEventListener('input', () => {
+        try {
+          if (typeof window.refreshTagListHighlight === 'function') window.refreshTagListHighlight();
+        } catch {}
       });
 
       // Click to edit

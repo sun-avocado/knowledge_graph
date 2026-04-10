@@ -2518,6 +2518,41 @@
   let currentTagClassId = null;
   let currentTagClassTags = [];
 
+  /** Get current entity tags from left panel fTags input as a Set (lowercase for comparison) */
+  function getEntityTagSet() {
+    const fTags = document.getElementById("fTags");
+    if (!fTags || !fTags.value) return new Set();
+    return new Set(
+      fTags.value
+        .split(/[,，;；、\n]+/)
+        .map((t) => t.trim())
+        .filter(Boolean)
+        .map((t) => t.toLowerCase()),
+    );
+  }
+
+  /** Toggle a tag in the left panel fTags input */
+  function toggleEntityTag(tag) {
+    const fTags = document.getElementById("fTags");
+    if (!fTags) return;
+    const current = fTags.value
+      .split(/[,，;；、\n]+/)
+      .map((t) => t.trim())
+      .filter(Boolean);
+    const idx = current.findIndex((t) => t.toLowerCase() === tag.toLowerCase());
+    if (idx >= 0) {
+      current.splice(idx, 1);
+    } else {
+      current.push(tag);
+    }
+    fTags.value = current.join(", ");
+    // Trigger input event so entity header syncs
+    try {
+      fTags.dispatchEvent(new Event("input", { bubbles: true }));
+    } catch {}
+    renderTagList(currentTagClassTags);
+  }
+
   function renderTagList(tags) {
     if (!tagList) return;
     tagList.innerHTML = "";
@@ -2530,28 +2565,55 @@
       tagList.appendChild(hint);
       return;
     }
+    const entityTags = getEntityTagSet();
     const frag = document.createDocumentFragment();
     arr.forEach((tag, idx) => {
+      const isApplied = entityTags.has(tag.toLowerCase());
       const chip = document.createElement("span");
-      chip.className = "tag";
+      chip.className = "tag" + (isApplied ? " tag-applied" : "");
       chip.style.display = "inline-flex";
       chip.style.alignItems = "center";
       chip.style.gap = "4px";
       chip.style.padding = "3px 8px";
       chip.style.borderRadius = "12px";
       chip.style.fontSize = "12px";
-      chip.style.background = "rgba(79,70,229,0.10)";
-      chip.style.color = "var(--accent, #4f46e5)";
-      chip.style.border = "1px solid rgba(79,70,229,0.25)";
+      chip.style.cursor = "pointer";
+      chip.style.userSelect = "none";
+      chip.style.transition = "all 0.15s ease";
+      if (isApplied) {
+        chip.style.background = "var(--accent, #4f46e5)";
+        chip.style.color = "#fff";
+        chip.style.border = "1px solid var(--accent, #4f46e5)";
+      } else {
+        chip.style.background = "rgba(79,70,229,0.10)";
+        chip.style.color = "var(--accent, #4f46e5)";
+        chip.style.border = "1px solid rgba(79,70,229,0.25)";
+      }
+      chip.title = isApplied
+        ? `点击移除标签「${tag}」`
+        : `点击添加标签「${tag}」`;
+      // Click on chip label area → toggle tag on entity
+      chip.addEventListener("click", (e) => {
+        if (e.target.closest(".tag-delete-btn")) return;
+        toggleEntityTag(tag);
+      });
       const labelSpan = document.createElement("span");
       labelSpan.textContent = tag;
       chip.appendChild(labelSpan);
+      if (isApplied) {
+        const check = document.createElement("i");
+        check.className = "fa-solid fa-check";
+        check.style.fontSize = "10px";
+        check.style.opacity = "0.8";
+        chip.appendChild(check);
+      }
       const del = document.createElement("i");
-      del.className = "fa-solid fa-xmark";
+      del.className = "fa-solid fa-xmark tag-delete-btn";
       del.style.cursor = "pointer";
       del.style.opacity = "0.6";
       del.style.fontSize = "10px";
-      del.title = "删除标签";
+      del.style.marginLeft = "2px";
+      del.title = "从分类中删除此标签";
       del.addEventListener("mouseover", () => {
         del.style.opacity = "1";
       });
@@ -2706,4 +2768,5 @@
   window.showTagPanelForClass = showTagPanelForClass;
   window.refreshClsNewOptions = refreshClsNewOptions;
   window.searchPropertiesByKeyword = searchPropertiesByKeyword;
+  window.refreshTagListHighlight = () => renderTagList(currentTagClassTags);
 })();
