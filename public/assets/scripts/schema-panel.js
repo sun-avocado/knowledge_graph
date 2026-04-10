@@ -2518,6 +2518,23 @@
   let currentTagClassId = null;
   let currentTagClassTags = [];
 
+  function getAllClassTags() {
+    const classes = Array.isArray(window.kbClasses) ? window.kbClasses : [];
+    const tagMap = new Map();
+    classes.forEach((cls) => {
+      const tags = Array.isArray(cls?.tags) ? cls.tags : [];
+      tags.forEach((rawTag) => {
+        const tag = (rawTag ?? "").toString().trim();
+        if (!tag) return;
+        const key = tag.toLowerCase();
+        if (!tagMap.has(key)) tagMap.set(key, tag);
+      });
+    });
+    return Array.from(tagMap.values()).sort((a, b) =>
+      a.localeCompare(b, "zh-CN"),
+    );
+  }
+
   /** Get current entity tags from left panel fTags input as a Set (lowercase for comparison) */
   function getEntityTagSet() {
     const fTags = document.getElementById("fTags");
@@ -2566,6 +2583,7 @@
       return;
     }
     const entityTags = getEntityTagSet();
+    const allowClassTagEdit = Boolean(currentTagClassId);
     const frag = document.createDocumentFragment();
     arr.forEach((tag, idx) => {
       const isApplied = entityTags.has(tag.toLowerCase());
@@ -2607,24 +2625,26 @@
         check.style.opacity = "0.8";
         chip.appendChild(check);
       }
-      const del = document.createElement("i");
-      del.className = "fa-solid fa-xmark tag-delete-btn";
-      del.style.cursor = "pointer";
-      del.style.opacity = "0.6";
-      del.style.fontSize = "10px";
-      del.style.marginLeft = "2px";
-      del.title = "从分类中删除此标签";
-      del.addEventListener("mouseover", () => {
-        del.style.opacity = "1";
-      });
-      del.addEventListener("mouseout", () => {
+      if (allowClassTagEdit) {
+        const del = document.createElement("i");
+        del.className = "fa-solid fa-xmark tag-delete-btn";
+        del.style.cursor = "pointer";
         del.style.opacity = "0.6";
-      });
-      del.addEventListener("click", (e) => {
-        e.stopPropagation();
-        removeClassTag(idx);
-      });
-      chip.appendChild(del);
+        del.style.fontSize = "10px";
+        del.style.marginLeft = "2px";
+        del.title = "从分类中删除此标签";
+        del.addEventListener("mouseover", () => {
+          del.style.opacity = "1";
+        });
+        del.addEventListener("mouseout", () => {
+          del.style.opacity = "0.6";
+        });
+        del.addEventListener("click", (e) => {
+          e.stopPropagation();
+          removeClassTag(idx);
+        });
+        chip.appendChild(del);
+      }
       frag.appendChild(chip);
     });
     tagList.appendChild(frag);
@@ -2699,16 +2719,17 @@
   function showTagPanelForClass(cls) {
     if (!cls) {
       currentTagClassId = null;
-      currentTagClassTags = [];
-      if (tagMgrDesc) tagMgrDesc.textContent = "请选择分类以管理其关联标签";
+      currentTagClassTags = getAllClassTags();
+      if (tagMgrDesc)
+        tagMgrDesc.textContent = `全部标签（${currentTagClassTags.length}）`;
       if (tagAddBar) tagAddBar.style.display = "none";
-      if (tagList) tagList.innerHTML = "";
+      renderTagList(currentTagClassTags);
       return;
     }
     currentTagClassId = cls.id;
     currentTagClassTags = Array.isArray(cls.tags) ? cls.tags.slice() : [];
     if (tagMgrDesc)
-      tagMgrDesc.textContent = `当前分类：${cls.label || cls.name}`;
+      tagMgrDesc.textContent = `当前分类：${cls.label || cls.name}（${currentTagClassTags.length}）`;
     if (tagAddBar) tagAddBar.style.display = "flex";
     renderTagList(currentTagClassTags);
     if (tagMsg) tagMsg.textContent = "";
@@ -2734,6 +2755,8 @@
           (c) => c.id === currentTagClassId,
         );
         showTagPanelForClass(cls || null);
+      } else {
+        showTagPanelForClass(null);
       }
     });
   }
@@ -2764,6 +2787,13 @@
       { capture: true },
     );
   }
+
+  // Default to all tags when no class is selected
+  setTimeout(() => {
+    try {
+      if (!window.kbSelectedClassId) showTagPanelForClass(null);
+    } catch {}
+  }, 200);
 
   window.showTagPanelForClass = showTagPanelForClass;
   window.refreshClsNewOptions = refreshClsNewOptions;

@@ -558,18 +558,18 @@
                         <input id="attrValueDate" type="date" class="wd-input" style="flex:1" />
                       </div>
                       <!-- quantity -->
-                      <div class="dtype-group" data-dtype="quantity" style="display:none; flex-wrap:wrap; gap:6px">
+                      <div class="dtype-group wd-dtype-row" data-dtype="quantity" style="display:none; flex-wrap:wrap; gap:6px">
                         <input id="attrValueAmount" type="number" step="any" class="wd-input" placeholder="数值" style="flex:1; min-width:100px" />
                         <input id="attrValueUnit" type="text" class="wd-input" placeholder="单位（可选）" style="flex:1; min-width:100px" />
                       </div>
                       <!-- globecoordinate -->
-                      <div class="dtype-group" data-dtype="globecoordinate" style="display:none; flex-wrap:wrap; gap:6px">
+                      <div class="dtype-group wd-dtype-row" data-dtype="globecoordinate" style="display:none; flex-wrap:wrap; gap:6px">
                         <input id="attrValueLat" type="number" step="any" class="wd-input" placeholder="纬度" style="flex:1; min-width:100px" />
                         <input id="attrValueLon" type="number" step="any" class="wd-input" placeholder="经度" style="flex:1; min-width:100px" />
                       </div>
                       <!-- commonsMedia (image upload) -->
-                      <div class="dtype-group" data-dtype="commonsMedia" style="display:none; flex-direction:column; gap:8px">
-                        <div style="display:flex; gap:6px; align-items:center">
+                      <div class="dtype-group wd-dtype-stack" data-dtype="commonsMedia" style="display:none; flex-direction:column; gap:8px">
+                        <div class="wd-inline-row" style="display:flex; gap:6px; align-items:center">
                           <input id="attrValueImage" type="file" accept="image/*" style="display:none" />
                           <button id="btnAttrImageUpload" type="button" class="btn wd-btn-outline" title="上传图像">
                             <i class="fa-solid fa-cloud-arrow-up"></i>
@@ -577,7 +577,7 @@
                           </button>
                           <span id="attrImageStateText" class="wd-msg" style="flex:1; min-height:20px; font-size:12px"></span>
                         </div>
-                        <div style="display:flex; gap:6px; align-items:center">
+                        <div class="wd-inline-row" style="display:flex; gap:6px; align-items:center">
                           <input id="attrValueImageUrl" type="text" class="wd-input" placeholder="图片地址" style="flex:1" />
                           <button type="button" id="btnAttrImageClear" class="btn wd-btn-icon" title="清除图片">
                             <i class="fa-solid fa-xmark"></i>
@@ -589,8 +589,8 @@
                         </div>
                       </div>
                       <!-- wikibase-entityid -->
-                      <div class="dtype-group" data-dtype="wikibase-entityid" style="display:none; flex-direction:column; gap:8px">
-                        <div style="display:flex; gap:6px; align-items:center">
+                      <div class="dtype-group wd-dtype-stack" data-dtype="wikibase-entityid" style="display:none; flex-direction:column; gap:8px">
+                        <div class="wd-inline-row" style="display:flex; gap:6px; align-items:center">
                           <input id="attrEntitySearchInput" type="text" class="wd-input" placeholder="输入关键词后回车检索实体" style="flex:1" autocomplete="off" />
                           <span id="attrEntitySearchStatus" class="wd-msg" style="min-width:120px"></span>
                         </div>
@@ -1969,7 +1969,7 @@
                 </button>
               </div>
               <div class="module-body">
-                <div id="tagMgrDesc" class="muted" style="font-size:12px;margin-bottom:8px;">请选择分类以管理其关联标签</div>
+                <div id="tagMgrDesc" class="muted" style="font-size:12px;margin-bottom:8px;">全部标签（加载中…）</div>
                 <div class="toolbar" id="tagAddBar" style="display:none;">
                   <input id="tagInput" placeholder="输入新标签…" style="flex:1;font-size:13px;" />
                   <button id="btnTagAdd" class="btn icon" type="button" title="添加标签" aria-label="添加标签">
